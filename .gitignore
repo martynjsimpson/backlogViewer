@@ -1,0 +1,6 @@
+.DS_Store
+widget-state.json
+.widget-state.json
+node_modules/
+coverage/
+.work-management-viewer-state/

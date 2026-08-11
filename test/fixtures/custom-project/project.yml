@@ -1,0 +1,55 @@
+model_version: 3
+project:
+  name: Fixture Project
+  description: Test fixture for custom work-management identifiers
+  primary_reference: README.md
+paths:
+  work: work
+  spikes: spikes
+  architecture: null
+  decisions: null
+  product: null
+  changelog: CHANGELOG.md
+ids:
+  request_prefix: ASK
+  work_prefix: TASK
+  pad: 4
+taxonomy:
+  request_types: [feature, spike]
+  work_types: [feature, spike]
+  priorities: [high, low]
+vcs:
+  system: none
+  owner: null
+  branching: null
+version:
+  scheme: semver-v
+  owner: command
+  file: VERSION
+  mirrors: []
+release:
+  changelog: required
+  pipeline: null
+  deploy_steps: []
+testing:
+  policy_document: null
+  agent: false
+agents:
+  - name: implementer
+    role: Implementer
+    model: sonnet
+    owns: [work]
+    excludes: []
+    reads: []
+    stack: null
+    consult_before: []
+  - name: architect
+    role: Architect
+    model: opus
+    owns: [spikes]
+    excludes: []
+    reads: []
+    stack: null
+    consult_before: []
+inactive_agents: []
+human_owns: []

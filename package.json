@@ -1,0 +1,29 @@
+{
+  "name": "work-management-viewer",
+  "version": "0.1.0",
+  "description": "Local dashboard and conformance checker for the manifest-driven work-management model.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "work-management-viewer": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "test:watch": "node --test --watch"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "server.js",
+    "src",
+    "public",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "dependencies": {
+    "yaml": "^2.8.1"
+  }
+}

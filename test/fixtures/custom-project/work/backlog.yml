@@ -1,0 +1,39 @@
+model_version: 1
+items:
+  - id: TASK-0001
+    source_request: ASK-0001
+    title: Implement the fixture
+    type: feature
+    capability: fixture
+    status: ready
+    priority: high
+    confidence: high
+    summary: >-
+      Fold this text without leaking
+      the YAML scalar indicator.
+    acceptance:
+      - The parser returns folded text.
+    remaining: Implement it.
+    dependencies: []
+    suggested_agents: [implementer]
+    evidence: fixture
+    done_in: []
+  - id: TASK-0002
+    source_request: ASK-0001
+    title: Investigate the fixture
+    type: spike
+    capability: fixture
+    status: done
+    priority: low
+    confidence: high
+    summary: |
+      Preserve this first line.
+      Preserve this second line.
+    acceptance:
+      - Findings exist.
+    remaining: ""
+    dependencies: []
+    suggested_agents: [architect]
+    evidence: fixture
+    done_in:
+      - "SPIKE: TASK-0002"

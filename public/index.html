@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Work Management Viewer</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+          <span class="header-eyebrow">Work Management Viewer</span>
+          <h1 id="projectTitle">Loading project…</h1>
+          <p id="projectDescription" class="project-description"></p>
+          <p id="loadedAt">Loading local planning files...</p>
+      </div>
+      <div class="header-actions">
+        <button id="backToViewerLink" class="text-link header-back is-hidden" type="button">Back</button>
+        <button id="refreshButton" type="button">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <nav class="primary-tabs" aria-label="Viewer sections">
+        <button class="primary-tab is-active" data-view="requests" type="button">Requests</button>
+        <button class="primary-tab" data-view="backlog" type="button">Work items</button>
+        <button class="primary-tab" data-view="links" type="button">Links</button>
+        <button class="primary-tab" data-view="release" type="button">Active release</button>
+        <button class="primary-tab" data-view="health" type="button">Health <span id="healthNavCount" class="nav-count">0</span></button>
+      </nav>
+
+      <section id="summaryGrid" class="summary-grid" aria-label="Project totals">
+        <article class="metric">
+          <span class="metric-label">Inbox Requests</span>
+          <div class="metric-value-line">
+            <button id="inboxRequestsButton" class="metric-link" type="button">
+              <strong id="inboxRequests">0</strong>
+            </button>
+            <span id="inboxRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+          <span>awaiting review</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">In Active Release</span>
+          <div class="metric-value-line">
+            <button id="activeReleaseRequestsButton" class="metric-link" type="button">
+              <strong id="activeReleaseRequests">0</strong>
+            </button>
+            <span id="activeReleaseRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+          <span>selected for delivery</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Open Requests</span>
+          <div class="metric-value-line">
+            <button id="openRequestsButton" class="metric-link" type="button">
+              <strong id="openRequests">0</strong>
+            </button>
+            <span id="openRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Unlinked Requests</span>
+          <div class="metric-value-line">
+            <button id="unlinkedRequestsButton" class="metric-link" type="button">
+              <strong id="unlinkedRequests">0</strong>
+            </button>
+            <span id="unlinkedRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+          <span>no backlog item</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Backlog Items</span>
+          <div class="metric-value-line">
+            <strong id="backlogTotal">0</strong>
+            <span id="backlogItemsTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+          <span id="backlogActive">excluding done/duplicate</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Backlog Items Complete</span>
+          <div class="metric-value-line">
+            <strong id="backlogComplete">0</strong>
+            <span id="backlogCompleteTrend" class="trend trend-flat" aria-label="No change">→</span>
+          </div>
+          <span>status done</span>
+        </article>
+        <article class="metric health-metric">
+          <span class="metric-label">Health Errors</span>
+          <div class="metric-value-line">
+            <button id="healthErrorsButton" class="metric-link" type="button"><strong id="healthErrors">0</strong></button>
+          </div>
+          <span>must be resolved</span>
+        </article>
+        <article class="metric health-metric">
+          <span class="metric-label">Health Warnings</span>
+          <div class="metric-value-line">
+            <button id="healthWarningsButton" class="metric-link" type="button"><strong id="healthWarnings">0</strong></button>
+          </div>
+          <span>review recommended</span>
+        </article>
+      </section>
+
+      <section id="toolbar" class="toolbar" aria-label="Filters">
+        <input id="searchInput" type="search" placeholder="Search, or use status:blocked agent:frontend-developer...">
+        <div id="statusFilter" class="multi-filter">
+          <button id="statusFilterButton" class="multi-filter-button" type="button" aria-expanded="false" aria-controls="statusFilterMenu">
+            <span id="statusFilterLabel">All statuses</span>
+          </button>
+          <div id="statusFilterMenu" class="multi-filter-menu" role="group" aria-label="Status filters"></div>
+        </div>
+        <div id="typeFilter" class="multi-filter">
+          <button id="typeFilterButton" class="multi-filter-button" type="button" aria-expanded="false" aria-controls="typeFilterMenu">
+            <span id="typeFilterLabel">All types</span>
+          </button>
+          <div id="typeFilterMenu" class="multi-filter-menu" role="group" aria-label="Type filters"></div>
+        </div>
+        <button id="resetFiltersButton" class="reset-button" type="button">Reset</button>
+        <span class="filter-scope">Filters affect charts and records; metric cards are project totals.</span>
+      </section>
+
+      <section id="activeFilters" class="active-filters" aria-label="Active filters"></section>
+
+      <section id="homeCharts" class="charts-grid home-charts" aria-label="Breakdowns">
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Request Status</h2>
+          </div>
+          <div id="requestStatusChart" class="bar-list"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Backlog Status</h2>
+          </div>
+          <div id="backlogStatusChart" class="bar-list"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-heading">
+            <h2>Requests by Release</h2>
+          </div>
+          <div id="requestReleaseChart" class="bar-list chart-scroll"></div>
+        </div>
+      </section>
+
+      <section id="moreChartsLinkRow" class="chart-link-row">
+        <button id="moreChartsLink" class="text-link" type="button">More Charts</button>
+      </section>
+
+      <section id="moreChartsPage" class="more-charts-page is-hidden">
+        <div class="page-heading">
+          <div>
+            <h2>More Charts</h2>
+            <p>Request and backlog charts use current filters. Release charts show delivered history.</p>
+          </div>
+        </div>
+
+        <section class="chart-section" aria-label="Request charts">
+          <div class="section-heading">
+            <h3>Request Charts</h3>
+          </div>
+          <div class="charts-grid more-charts-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Requests by Type</h2>
+              </div>
+              <div id="requestTypeChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Requests by Priority</h2>
+              </div>
+              <div id="requestPriorityChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Request Sections</h2>
+              </div>
+              <div id="requestSectionChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Request Link Coverage</h2>
+              </div>
+              <div id="requestLinkCoverageChart" class="bar-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chart-section" aria-label="Release charts">
+          <div class="section-heading">
+            <h3>Release Charts</h3>
+          </div>
+          <div class="charts-grid release-charts-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Request Types by Release</h2>
+              </div>
+              <div id="releaseTypeChart" class="stacked-chart chart-scroll-large"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Request Priority by Release</h2>
+              </div>
+              <div id="releasePriorityChart" class="stacked-chart chart-scroll-large"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Delivery Completeness by Release</h2>
+              </div>
+              <div id="releaseCompletenessChart" class="stacked-chart chart-scroll-large"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="chart-section" aria-label="Backlog charts">
+          <div class="section-heading">
+            <h3>Backlog Charts</h3>
+          </div>
+          <div class="charts-grid more-charts-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Backlog Capabilities</h2>
+              </div>
+              <div id="capabilityChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Backlog by Type</h2>
+              </div>
+              <div id="backlogTypeChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Backlog by Priority</h2>
+              </div>
+              <div id="backlogPriorityChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Suggested Agents</h2>
+              </div>
+              <div id="agentChart" class="bar-list"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Backlog Source Coverage</h2>
+              </div>
+              <div id="backlogSourceCoverageChart" class="bar-list"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section id="requestsView" class="data-view">
+        <div class="panel-heading">
+          <h2>Requests</h2>
+          <span id="requestCount" class="count-label"></span>
+        </div>
+        <div id="requestList" class="item-list"></div>
+      </section>
+
+      <section id="backlogView" class="data-view is-hidden">
+        <div class="panel-heading">
+          <h2>Work items</h2>
+          <span id="backlogCount" class="count-label"></span>
+        </div>
+        <div id="backlogList" class="item-list"></div>
+      </section>
+
+      <section id="linksView" class="data-view is-hidden">
+        <div class="panel-heading">
+          <h2>Request Links</h2>
+          <span id="linkCount" class="count-label"></span>
+        </div>
+        <div id="linkList" class="item-list compact"></div>
+      </section>
+
+      <section id="releaseView" class="special-view is-hidden" aria-labelledby="releaseHeading">
+        <div class="page-heading">
+          <div>
+            <span class="section-kicker">Third status plane</span>
+            <h2 id="releaseHeading">Active release</h2>
+          </div>
+          <span id="releaseStatusBadge" class="tag"></span>
+        </div>
+        <div id="releaseOverview" class="release-overview"></div>
+        <div id="releaseItems" class="item-list"></div>
+        <div id="releaseSections" class="release-sections"></div>
+      </section>
+
+      <section id="healthView" class="special-view is-hidden" aria-labelledby="healthHeading">
+        <div class="page-heading">
+          <div>
+            <span class="section-kicker">Model conformance</span>
+            <h2 id="healthHeading">Project health</h2>
+            <p>Findings are diagnostic only; the viewer never rewrites work-management files.</p>
+          </div>
+          <div id="healthSummary" class="health-summary"></div>
+        </div>
+        <div id="healthFilters" class="health-filters" role="group" aria-label="Health severity"></div>
+        <div id="healthList" class="health-list"></div>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">Nothing matches the current filters.</div>
+    </template>
+
+    <div id="detailsModal" class="modal-overlay is-hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <section class="modal-panel">
+        <header class="modal-header">
+          <div>
+            <span id="modalEyebrow" class="modal-eyebrow"></span>
+            <h2 id="modalTitle"></h2>
+          </div>
+          <button id="modalCloseButton" class="modal-close" type="button" aria-label="Close details">Close</button>
+        </header>
+        <div id="modalTags" class="tag-row modal-tags"></div>
+        <div id="modalBody" class="modal-body"></div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
