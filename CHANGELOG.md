@@ -5,6 +5,29 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-11
+
+### Changed
+
+- Made Health findings actionable: each result now explains what the finding means, labels whether
+  it is a fix, review, or optional maintenance task, shows the observed value, and gives a concrete
+  recommended action plus the relevant plugin command where one exists.
+- Added `recommendation` as a third Health severity for optional guidance; pruning hygiene no longer
+  inflates the warning count.
+- Added a URL-backed, multi-select Code filter to Health so related findings can be reviewed and
+  resolved as a focused group.
+- Aligned Health findings with the Request and Work item card layout, including top-line metadata
+  and badges, while retaining the severity colour band and removing the redundant `View details`
+  label.
+- Linked Request and Work item entity IDs in Health finding modals to their corresponding filtered
+  record views.
+- Moved the More Charts back-navigation control from the global header into the chart page heading.
+- Standardised user-facing dashboard and chart terminology on `Work item` instead of `Backlog`.
+- Redesigned Link cards to show request context and useful linked Work item details, with direct
+  navigation and distinct linked, missing, unlinked, and intentionally-empty relationship states.
+- Added safe lightweight formatting for Active Release prose, including lists, bold text, inline
+  code, and navigable Request and Work item IDs.
+
 ## [0.2.0] - 2026-08-11
 
 ### Changed

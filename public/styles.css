@@ -113,10 +113,6 @@ input {
   gap: 14px;
 }
 
-.header-back {
-  color: var(--blue);
-}
-
 main {
   width: min(1480px, 100%);
   margin: 0 auto;
@@ -266,6 +262,17 @@ button:hover {
 .more-charts-page {
   display: grid;
   gap: 18px;
+}
+
+.more-charts-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+}
+
+.chart-page-back {
+  white-space: nowrap;
 }
 
 .page-heading,
@@ -777,9 +784,95 @@ button.bar-row:hover {
   --bar-color: var(--accent, var(--blue));
 }
 
-.compact .item-card {
-  grid-template-columns: minmax(150px, 220px) 1fr;
+.view-heading-copy h2,
+.view-heading-copy p {
+  margin: 0;
+}
+
+.view-heading-copy p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.link-card {
+  gap: 10px;
+}
+
+.link-relationships {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.link-relationships h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.link-item-row {
+  display: grid;
+  grid-template-columns: minmax(90px, auto) minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+button.link-item-row:hover {
+  border-color: #506176;
+  background: var(--surface-soft);
+}
+
+.link-item-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.link-item-copy strong {
+  overflow-wrap: anywhere;
+}
+
+.link-notice {
+  background: var(--surface-soft);
+}
+
+.link-notice-copy {
+  min-width: 0;
+  color: var(--text-soft);
+}
+
+.link-notice-no-id .link-notice-copy {
+  grid-column: 1 / 3;
+}
+
+.tag.link-state-linked {
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+  color: var(--green);
+}
+
+.tag.link-state-intentional {
+  border-color: color-mix(in srgb, var(--blue) 42%, var(--line));
+  color: var(--blue);
+}
+
+.tag.link-state-unlinked {
+  border-color: color-mix(in srgb, var(--amber) 45%, var(--line));
+  color: var(--amber);
+}
+
+.tag.link-state-missing {
+  border-color: color-mix(in srgb, var(--red) 45%, var(--line));
+  color: var(--red);
 }
 
 .empty-state {
@@ -927,8 +1020,12 @@ button.bar-row:hover {
   .charts-grid,
   .toolbar,
   .item-topline,
-  .compact .item-card {
+  .link-item-row {
     grid-template-columns: 1fr;
+  }
+
+  .link-notice-no-id .link-notice-copy {
+    grid-column: auto;
   }
 
   .bar-row {
@@ -1078,16 +1175,17 @@ button.bar-row:hover {
 
 .release-goal h3,
 .release-goal p,
-.release-section h3,
-.health-card h3,
-.health-card p {
+.release-section h3 {
   margin: 0;
 }
 
-.release-goal p,
-.health-card p {
+.release-goal-copy {
   margin-top: 6px;
   color: var(--text-soft);
+}
+
+.release-goal-copy p {
+  margin: 0;
 }
 
 .release-sections {
@@ -1103,14 +1201,80 @@ button.bar-row:hover {
 .release-copy {
   margin-top: 9px;
   color: var(--text-soft);
-  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.release-copy p,
+.release-copy ul,
+.release-copy ol {
+  margin: 0;
+}
+
+.release-copy > :not(:first-child) {
+  margin-top: 9px;
+}
+
+.release-copy ul,
+.release-copy ol {
+  padding-left: 22px;
+}
+
+.release-copy li + li {
+  margin-top: 7px;
+}
+
+.release-copy code,
+.release-goal-copy code,
+.release-item-summary code {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-soft);
+  padding: 1px 4px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.release-id-link {
+  display: inline;
+  font: inherit;
+  font-weight: inherit;
+  vertical-align: baseline;
 }
 
 .health-summary,
-.health-filters {
+.health-filters,
+.health-filter-tools {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.health-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.health-filter-tools {
+  align-items: center;
+}
+
+.health-filter-label,
+.health-result-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.health-filter-label {
+  font-weight: 700;
+}
+
+.health-code-filter {
+  width: min(360px, 100%);
+}
+
+.health-result-count {
+  margin-left: auto;
 }
 
 .health-filter {
@@ -1131,27 +1295,7 @@ button.bar-row:hover {
 }
 
 .health-card {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) auto;
-  gap: 13px;
-  align-items: start;
-  border: 1px solid var(--line);
   border-left-width: 4px;
-  border-radius: 8px;
-  background: var(--surface-raised);
-  padding: 13px;
-  cursor: pointer;
-  transition: background-color 140ms ease, box-shadow 140ms ease;
-}
-
-.health-card:hover {
-  background: var(--surface-soft);
-  box-shadow: 0 0 0 1px var(--hover-line);
-}
-
-.health-card:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
 }
 
 .health-card.severity-error {
@@ -1162,25 +1306,43 @@ button.bar-row:hover {
   border-left-color: var(--amber);
 }
 
-.health-marker {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.health-card.severity-recommendation {
+  border-left-color: var(--blue);
 }
 
-.health-action {
-  align-self: center;
+.health-card .health-meaning {
+  color: var(--text-soft);
+}
+
+.health-card .health-observed {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
-.health-card:hover .health-action,
-.health-card:focus-visible .health-action {
+.health-card .health-next-step {
+  margin: 2px 0 0;
+  border-left: 2px solid var(--blue);
+  border-radius: 0 5px 5px 0;
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+  padding: 7px 9px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.health-next-step strong {
   color: var(--blue);
+}
+
+.health-command,
+.command-value {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface-soft);
+  padding: 2px 5px;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+  white-space: nowrap;
 }
 
 .tag.severity-error,
@@ -1193,6 +1355,11 @@ button.bar-row:hover {
 .tag.severity-warning {
   border-color: color-mix(in srgb, var(--amber) 45%, var(--line));
   color: var(--amber);
+}
+
+.tag.severity-recommendation {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+  color: var(--blue);
 }
 
 .tag[class*="completion-"] {
@@ -1221,7 +1388,16 @@ button.bar-row:hover {
     margin-inline: -4px;
   }
 
-  .health-card {
-    grid-template-columns: 1fr;
+  .health-filter-tools {
+    align-items: stretch;
+  }
+
+  .health-filter-label,
+  .health-result-count {
+    width: 100%;
+  }
+
+  .health-result-count {
+    margin-left: 0;
   }
 }

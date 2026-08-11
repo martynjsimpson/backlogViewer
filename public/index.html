@@ -16,7 +16,6 @@
           <p id="loadedAt">Loading local planning files...</p>
       </div>
       <div class="header-actions">
-        <button id="backToViewerLink" class="text-link header-back is-hidden" type="button">Back</button>
         <button id="refreshButton" type="button">Refresh</button>
       </div>
     </header>
@@ -68,10 +67,10 @@
             </button>
             <span id="unlinkedRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
-          <span>no backlog item</span>
+          <span>no work item</span>
         </article>
         <article class="metric">
-          <span class="metric-label">Backlog Items</span>
+          <span class="metric-label">Work Items</span>
           <div class="metric-value-line">
             <strong id="backlogTotal">0</strong>
             <span id="backlogItemsTrend" class="trend trend-flat" aria-label="No change">→</span>
@@ -79,7 +78,7 @@
           <span id="backlogActive">excluding done/duplicate</span>
         </article>
         <article class="metric">
-          <span class="metric-label">Backlog Items Complete</span>
+          <span class="metric-label">Completed Work Items</span>
           <div class="metric-value-line">
             <strong id="backlogComplete">0</strong>
             <span id="backlogCompleteTrend" class="trend trend-flat" aria-label="No change">→</span>
@@ -131,7 +130,7 @@
         </div>
         <div class="panel">
           <div class="panel-heading">
-            <h2>Backlog Status</h2>
+            <h2>Work Item Status</h2>
           </div>
           <div id="backlogStatusChart" class="bar-list"></div>
         </div>
@@ -151,7 +150,10 @@
         <div class="page-heading">
           <div>
             <h2>More Charts</h2>
-            <p>Request and backlog charts use current filters. Release charts show delivered history.</p>
+            <div class="more-charts-intro">
+              <p>Request and work-item charts use current filters. Release charts show delivered history.</p>
+              <button id="backToViewerLink" class="text-link chart-page-back" type="button">← Back to overview</button>
+            </div>
           </div>
         </div>
 
@@ -213,26 +215,26 @@
           </div>
         </section>
 
-        <section class="chart-section" aria-label="Backlog charts">
+        <section class="chart-section" aria-label="Work item charts">
           <div class="section-heading">
-            <h3>Backlog Charts</h3>
+            <h3>Work Item Charts</h3>
           </div>
           <div class="charts-grid more-charts-grid">
             <div class="panel">
               <div class="panel-heading">
-                <h2>Backlog Capabilities</h2>
+                <h2>Work Item Capabilities</h2>
               </div>
               <div id="capabilityChart" class="bar-list"></div>
             </div>
             <div class="panel">
               <div class="panel-heading">
-                <h2>Backlog by Type</h2>
+                <h2>Work Items by Type</h2>
               </div>
               <div id="backlogTypeChart" class="bar-list"></div>
             </div>
             <div class="panel">
               <div class="panel-heading">
-                <h2>Backlog by Priority</h2>
+                <h2>Work Items by Priority</h2>
               </div>
               <div id="backlogPriorityChart" class="bar-list"></div>
             </div>
@@ -244,7 +246,7 @@
             </div>
             <div class="panel">
               <div class="panel-heading">
-                <h2>Backlog Source Coverage</h2>
+                <h2>Work Item Source Coverage</h2>
               </div>
               <div id="backlogSourceCoverageChart" class="bar-list"></div>
             </div>
@@ -270,10 +272,13 @@
 
       <section id="linksView" class="data-view is-hidden">
         <div class="panel-heading">
-          <h2>Request Links</h2>
+          <div class="view-heading-copy">
+            <h2>Request and Work item links</h2>
+            <p>See the delivery work connected to each request and identify missing links.</p>
+          </div>
           <span id="linkCount" class="count-label"></span>
         </div>
-        <div id="linkList" class="item-list compact"></div>
+        <div id="linkList" class="item-list"></div>
       </section>
 
       <section id="releaseView" class="special-view is-hidden" aria-labelledby="releaseHeading">
@@ -298,7 +303,20 @@
           </div>
           <div id="healthSummary" class="health-summary"></div>
         </div>
-        <div id="healthFilters" class="health-filters" role="group" aria-label="Health severity"></div>
+        <div class="health-controls">
+          <div id="healthFilters" class="health-filters" role="group" aria-label="Health severity"></div>
+          <div class="health-filter-tools">
+            <span class="health-filter-label">Code</span>
+            <div id="healthCodeFilter" class="multi-filter health-code-filter">
+              <button id="healthCodeFilterButton" class="multi-filter-button" type="button" aria-expanded="false" aria-controls="healthCodeFilterMenu">
+                <span id="healthCodeFilterLabel">All codes</span>
+              </button>
+              <div id="healthCodeFilterMenu" class="multi-filter-menu" role="group" aria-label="Health code filters"></div>
+            </div>
+            <button id="resetHealthFiltersButton" class="reset-button" type="button">Reset</button>
+            <span id="healthFindingCount" class="health-result-count" aria-live="polite"></span>
+          </div>
+        </div>
         <div id="healthList" class="health-list"></div>
       </section>
     </main>

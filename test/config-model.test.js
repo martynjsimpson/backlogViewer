@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { ConfigurationError, discoverManifest, loadProjectConfiguration } = require("../src/config");
-const { buildHealth, calculateWidgets, linkModel } = require("../src/model");
+const { buildHealth, calculateWidgets, createFinding, linkModel } = require("../src/model");
 const { parseActiveRelease, parseBacklog, parseRequests } = require("../src/parsers");
 const { getData, usage } = require("../server");
 
@@ -42,7 +42,7 @@ test("links both directions and validates a conforming fixture", async () => {
   const linked = linkModel(requestDocument.items, backlogDocument.items);
   const health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
   assert.deepEqual(linked.requests.find((request) => request.id === "ASK-0001").resolved_backlog_items, ["TASK-0001", "TASK-0002"]);
-  assert.deepEqual(health.summary, { errors: 0, warnings: 0, total: 0 });
+  assert.deepEqual(health.summary, { errors: 0, warnings: 0, recommendations: 0, total: 0 });
   assert.equal(calculateWidgets(linked.requests, linked.backlog, activeRelease, health).activeReleaseRequests, 1);
 });
 
@@ -57,7 +57,7 @@ test("builds the complete API model from a project manifest", async (context) =>
   const data = await getData(config);
   assert.equal(data.project.name, "Fixture Project");
   assert.equal(data.active_release.status, "proposed");
-  assert.deepEqual(data.health.summary, { errors: 0, warnings: 0, total: 0 });
+  assert.deepEqual(data.health.summary, { errors: 0, warnings: 0, recommendations: 0, total: 0 });
   assert.equal(data.widgets.healthErrors, 0);
   assert.match(data.widget_history.state_file, /[a-f0-9]{16}\.json$/);
 });
@@ -65,4 +65,57 @@ test("builds the complete API model from a project manifest", async (context) =>
 test("documents the project and port CLI options", () => {
   assert.match(usage(), /--project <path>/);
   assert.match(usage(), /--port <number>/);
+});
+
+test("turns health codes into concrete remediation guidance", () => {
+  const annotated = createFinding(
+    "warning",
+    "ANNOTATED_COMPLETION_VALUE",
+    "Remove explanatory text from this completion value",
+    "v1.2.3 (partial — TASK-0001)",
+    { entity_type: "request", entity_id: "ASK-0001" },
+  );
+  assert.equal(annotated.action_type, "fix");
+  assert.match(annotated.meaning, /machine-readable completion field/);
+  assert.match(annotated.recommended_action, /replace .* with only the release version/i);
+  assert.match(annotated.recommended_action, /Notes:/);
+
+  const unknown = createFinding(
+    "warning",
+    "UNKNOWN_REQUEST_FIELD",
+    "Move unsupported request field: Remaining",
+    "Line 20: follow-up work",
+    { entity_type: "request", entity_id: "ASK-0002" },
+  );
+  assert.match(unknown.recommended_action, /Move the Remaining: text into Notes:/);
+
+  const pruning = createFinding(
+    "recommendation",
+    "PRUNING_HYGIENE",
+    "Review old completed records for pruning",
+    "42 old records",
+    { entity_type: "project", entity_id: "Fixture Project" },
+  );
+  assert.equal(pruning.severity, "recommendation");
+  assert.equal(pruning.action_type, "maintenance");
+  assert.equal(pruning.command, "/work-prune");
+  assert.match(pruning.meaning, /No immediate correctness fix is required/);
+
+  const otherWarningCodes = [
+    ["INVALID_COMPLETION_VALUE", "Replace this free-text completion value", { entity_type: "work", entity_id: "TASK-0001" }],
+    ["MISSING_AGENT_PATH", "Review this missing agent path", { entity_type: "agent", entity_id: "implementer" }],
+    ["REQUEST_SECTION_STRUCTURE", "Merge legacy request sections", { entity_type: "file", entity_id: "requests.md" }],
+    ["REQUEST_ID_FORMAT", "Review this request ID format", { entity_type: "request", entity_id: "ASK-1" }],
+    ["WORK_ID_FORMAT", "Review this work-item ID format", { entity_type: "work", entity_id: "TASK-1" }],
+    ["RELEASE_STATUS_DRIFT", "Synchronise release status", { entity_type: "work", entity_id: "TASK-0001" }],
+    ["VCS_MISMATCH", "Review the Git repository mismatch", { entity_type: "manifest", entity_id: "vcs.system" }],
+    ["MISSING_CHANGELOG", "Create or correct the configured changelog", { entity_type: "manifest", entity_id: "paths.changelog" }],
+  ];
+  for (const [code, title, entity] of otherWarningCodes) {
+    const result = createFinding("warning", code, title, "observed value", entity);
+    assert.ok(result.meaning, `${code} should explain what it means`);
+    assert.ok(result.recommended_action, `${code} should provide a recommended action`);
+    assert.ok(result.action_type, `${code} should classify the response`);
+    assert.doesNotMatch(result.meaning, /^This value differs/, `${code} should not use fallback guidance`);
+  }
 });

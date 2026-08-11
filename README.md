@@ -61,12 +61,19 @@ manifests produce a clear startup error. They are never auto-migrated.
 ## Views
 
 - **Requests** — human-facing asks with status/type filtering, qualified search, and delivery links.
-- **Work items** — parsed YAML backlog records, including blocked state and spike completion.
-- **Links** — bidirectional request/work-item coverage, including intentional `Work items: none`.
-- **Active release** — goal, version, branch, release status, selected items joined to live backlog
-  state, decisions, agents, blockers, and verification information.
+- **Work items** — parsed YAML work-item records, including blocked state and spike completion.
+- **Links** — request context plus linked work-item titles, statuses, types, and capabilities, with
+  distinct states for valid links, missing references, unlinked requests, and intentional
+  `Work items: none`.
+- **Active release** — goal, version, branch, release status, selected items joined to live work-item
+  state, decisions, agents, blockers, and verification information. Release prose renders common
+  Markdown emphasis, inline code, and lists; recognised Request and Work item IDs link to their
+  records.
 - **Health** — structure, vocabulary, paired fields, completion values, referential integrity,
-  spike documents, ownership, VCS coherence, and pruning hygiene.
+  spike documents, ownership, VCS coherence, and pruning hygiene. Findings are classified as
+  errors, warnings, or recommendations; each explains what it means, shows the observed value, and
+  gives a concrete recommended action. Severity and multi-select Code filters help isolate a class
+  of finding while you work through it.
 
 Filter and navigation state is encoded in the URL, so a filtered view can be bookmarked and the
 browser back button restores the previous state. Search accepts ordinary text and qualified terms

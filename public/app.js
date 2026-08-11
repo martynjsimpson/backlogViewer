@@ -10,7 +10,8 @@ const state = {
   backlogItemIds: new Set(),
   deliveredRelease: "",
   unlinkedOnly: false,
-  healthSeverities: new Set(["error", "warning"]),
+  healthSeverities: new Set(["error", "warning", "recommendation"]),
+  healthCodes: new Set(),
   hasAppliedDefaultStatuses: false,
 };
 
@@ -70,6 +71,12 @@ const elements = {
   releaseStatusBadge: byId("releaseStatusBadge"),
   healthSummary: byId("healthSummary"),
   healthFilters: byId("healthFilters"),
+  healthCodeFilter: byId("healthCodeFilter"),
+  healthCodeFilterButton: byId("healthCodeFilterButton"),
+  healthCodeFilterLabel: byId("healthCodeFilterLabel"),
+  healthCodeFilterMenu: byId("healthCodeFilterMenu"),
+  resetHealthFiltersButton: byId("resetHealthFiltersButton"),
+  healthFindingCount: byId("healthFindingCount"),
   healthList: byId("healthList"),
   healthNavCount: byId("healthNavCount"),
   detailsModal: byId("detailsModal"),
@@ -102,6 +109,10 @@ function label(value) {
 
 function humanKey(value) {
   return String(value).replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function countLabel(count, singular) {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
 
 function truncate(value, max = 280) {
@@ -138,6 +149,114 @@ function makeTag(value, kind = "") {
   return tag;
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function releaseEntity(id) {
+  const normalisedId = String(id).toUpperCase();
+  const request = state.data.requests.find((item) => item.id === normalisedId);
+  if (request) return { kind: "request", item: request };
+  const workItem = state.data.backlog.find((item) => item.id === normalisedId);
+  return workItem ? { kind: "work", item: workItem } : null;
+}
+
+function appendReleaseInline(container, value, allowBold = true, linkIds = true) {
+  const text = String(value ?? "");
+  const ids = state.data.project.manifest.ids || {};
+  const requestPattern = `${escapeRegExp(ids.request_prefix)}-\\d+`;
+  const workPattern = `${escapeRegExp(ids.work_prefix)}-\\d+[A-Z]?`;
+  const tokenParts = ["`[^`\\n]+`"];
+  if (allowBold) tokenParts.push("\\*\\*[^\\n]+?\\*\\*");
+  if (linkIds) tokenParts.push(`\\b(?:${requestPattern}|${workPattern})\\b`);
+  const tokens = new RegExp(tokenParts.join("|"), "gi");
+  let cursor = 0;
+  let match;
+  while ((match = tokens.exec(text))) {
+    if (match.index > cursor) container.append(document.createTextNode(text.slice(cursor, match.index)));
+    const token = match[0];
+    if (token.startsWith("`") && token.endsWith("`")) {
+      const code = document.createElement("code");
+      code.textContent = token.slice(1, -1);
+      container.append(code);
+    } else if (allowBold && token.startsWith("**") && token.endsWith("**")) {
+      const strong = document.createElement("strong");
+      appendReleaseInline(strong, token.slice(2, -2), false, linkIds);
+      container.append(strong);
+    } else {
+      const entity = releaseEntity(token);
+      if (!entity) container.append(document.createTextNode(token));
+      else {
+        const button = document.createElement("button");
+        button.className = "inline-link release-id-link";
+        button.type = "button";
+        button.textContent = entity.item.id;
+        button.setAttribute("aria-label", `Open ${entity.kind === "request" ? "Request" : "Work item"} ${entity.item.id}`);
+        button.addEventListener("click", () => applyFilters(entity.kind === "request"
+          ? { view: "requests", requestIds: [entity.item.id] }
+          : { view: "backlog", backlogItemIds: [entity.item.id] }));
+        container.append(button);
+      }
+    }
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) container.append(document.createTextNode(text.slice(cursor)));
+}
+
+function renderReleaseMarkdown(value) {
+  const fragment = document.createDocumentFragment();
+  let paragraphLines = [];
+  let currentList = null;
+  let currentListTag = "";
+  let currentItem = null;
+
+  function flushParagraph() {
+    if (!paragraphLines.length) return;
+    const paragraph = document.createElement("p");
+    appendReleaseInline(paragraph, paragraphLines.join(" "));
+    fragment.append(paragraph);
+    paragraphLines = [];
+  }
+
+  function closeList() {
+    currentList = null;
+    currentListTag = "";
+    currentItem = null;
+  }
+
+  for (const rawLine of String(value ?? "").split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || /^---+$/.test(trimmed)) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+    const listMatch = rawLine.match(/^\s*(?:([-+*])|(\d+)[.)])\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      const listTag = listMatch[2] ? "ol" : "ul";
+      if (!currentList || currentListTag !== listTag) {
+        currentList = document.createElement(listTag);
+        currentListTag = listTag;
+        fragment.append(currentList);
+      }
+      currentItem = document.createElement("li");
+      appendReleaseInline(currentItem, listMatch[3]);
+      currentList.append(currentItem);
+      continue;
+    }
+    if (currentList && currentItem && /^\s+/.test(rawLine)) {
+      currentItem.append(document.createTextNode(" "));
+      appendReleaseInline(currentItem, trimmed);
+      continue;
+    }
+    closeList();
+    paragraphLines.push(trimmed);
+  }
+  flushParagraph();
+  return fragment;
+}
+
 function emptyNode(message = "Nothing matches the current filters.") {
   const node = elements.emptyTemplate.content.firstElementChild.cloneNode(true);
   node.textContent = message;
@@ -158,6 +277,12 @@ function formatDetailValue(value) {
 }
 
 function orderedEntries(item) {
+  if (item.severity && item.code) {
+    const healthPreferred = ["title", "severity", "action_type", "meaning", "recommended_action", "command", "message", "code", "entity_type", "entity_id"];
+    return [...new Set([...healthPreferred, ...Object.keys(item).sort()])]
+      .filter((key) => Object.prototype.hasOwnProperty.call(item, key))
+      .filter((key) => item[key] !== "" && item[key] != null);
+  }
   const preferred = ["id", "request_id", "source_request", "title", "type", "capability", "status", "priority", "confidence", "section", "summary", "notes", "blocked_on", "acceptance", "remaining", "dependencies", "suggested_agents", "backlog_items", "work_items", "done_in", "source", "source_block"];
   const hidden = new Set(["live_item", "done_in_labels", "work_items_raw", "done_in_raw", "unknown_fields", "resolved_backlog_items", "unresolved_work_items", "source_requests", "has_request", "work_items_explicitly_none"]);
   return [...new Set([...preferred, ...Object.keys(item).sort()])]
@@ -205,6 +330,26 @@ function renderDetailValue(value, key, item, kind) {
     });
     return button;
   }
+  if (kind === "health" && key === "entity_id" && value && ["request", "work"].includes(item.entity_type)) {
+    const requestEntity = item.entity_type === "request";
+    const button = document.createElement("button");
+    button.className = "inline-link";
+    button.type = "button";
+    button.textContent = value;
+    button.addEventListener("click", () => {
+      closeDetailsModal();
+      applyFilters(requestEntity
+        ? { view: "requests", requestIds: [value] }
+        : { view: "backlog", backlogItemIds: [value] });
+    });
+    return button;
+  }
+  if (kind === "health" && key === "command") {
+    const code = document.createElement("code");
+    code.className = "command-value";
+    code.textContent = value;
+    return code;
+  }
   return document.createTextNode(formatDetailValue(value));
 }
 
@@ -220,7 +365,11 @@ function openDetailsModal(item, kind, trigger = document.activeElement) {
     const row = document.createElement("div");
     row.className = "detail-row";
     const term = document.createElement("dt");
-    term.textContent = humanKey(key);
+    term.textContent = kind === "health" && key === "message"
+      ? "Observed"
+      : kind === "health" && key === "action_type"
+        ? "Response"
+        : humanKey(key === "backlog_items" ? "work_items" : key);
     const description = document.createElement("dd");
     description.append(renderDetailValue(item[key], key, item, kind));
     row.append(term, description);
@@ -300,7 +449,11 @@ function renderBacklogCard(item, releaseItem = null) {
   top.append(id, title, meta);
   const summary = document.createElement("p");
   summary.className = "item-summary";
-  summary.textContent = truncate(releaseItem?.description || item.summary);
+  const summaryText = truncate(releaseItem?.description || item.summary);
+  if (releaseItem) {
+    summary.classList.add("release-item-summary");
+    appendReleaseInline(summary, summaryText, true, false);
+  } else summary.textContent = summaryText;
   const tags = document.createElement("div");
   tags.className = "tag-row";
   tags.append(makeTag(item.status, "status"), makeTag(item.type, "type"), makeTag(item.priority, "priority"), makeTag(item.capability || "no capability", "capability"));
@@ -312,20 +465,97 @@ function renderBacklogCard(item, releaseItem = null) {
   return makeClickableCard(card, item, "work");
 }
 
+function makeLinkStateTag(text, stateName) {
+  const tag = makeTag(text);
+  tag.classList.add("link-state", `link-state-${stateName}`);
+  return tag;
+}
+
+function renderLinkedWorkItem(item) {
+  const button = document.createElement("button");
+  button.className = "link-item-row";
+  button.type = "button";
+  button.setAttribute("aria-label", `Open Work item ${item.id}`);
+  const id = document.createElement("span");
+  id.className = "item-id";
+  id.textContent = item.id;
+  const copy = document.createElement("span");
+  copy.className = "link-item-copy";
+  const title = document.createElement("strong");
+  title.textContent = item.title || "Untitled work item";
+  const context = document.createElement("span");
+  context.className = "meta";
+  context.textContent = [item.type, item.capability].filter(Boolean).join(" · ");
+  copy.append(title, context);
+  button.append(id, copy, makeTag(item.status, "status"));
+  button.addEventListener("click", () => applyFilters({ view: "backlog", backlogItemIds: [item.id] }));
+  return button;
+}
+
+function renderLinkNotice(id, message, stateName) {
+  const row = document.createElement("div");
+  row.className = `link-item-row link-notice link-notice-${stateName}`;
+  if (!id) row.classList.add("link-notice-no-id");
+  if (id) {
+    const idNode = document.createElement("span");
+    idNode.className = "item-id";
+    idNode.textContent = id;
+    row.append(idNode);
+  }
+  const copy = document.createElement("span");
+  copy.className = "link-notice-copy";
+  copy.textContent = message;
+  row.append(copy, makeLinkStateTag(stateName === "missing" ? "missing" : stateName === "intentional" ? "intentional" : "needs link", stateName));
+  return row;
+}
+
 function renderLinkCard(request) {
   const card = document.createElement("article");
-  card.className = "item-card";
+  card.className = "item-card link-card";
+  const top = document.createElement("div");
+  top.className = "item-topline";
+  const requestLink = document.createElement("button");
+  requestLink.className = "inline-link item-id";
+  requestLink.type = "button";
+  requestLink.textContent = request.id;
+  requestLink.setAttribute("aria-label", `Open request details for ${request.id}`);
+  requestLink.addEventListener("click", () => openDetailsModal(request, "request", requestLink));
   const title = document.createElement("h3");
   title.className = "item-title";
-  title.textContent = `${request.id} · ${request.title || "Untitled request"}`;
+  title.textContent = request.title || "Untitled request";
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  meta.textContent = request.section || "";
+  top.append(requestLink, title, meta);
+  const summary = document.createElement("p");
+  summary.className = "item-summary";
+  summary.textContent = truncate(request.summary, 180);
   const tags = document.createElement("div");
   tags.className = "tag-row";
-  const linked = request.backlog_items || [];
-  if (linked.length) for (const id of linked) tags.append(makeTag(id));
-  else if (request.work_items_explicitly_none) tags.append(makeTag("no work required"));
-  else tags.append(makeTag("no backlog item", "severity"));
-  card.append(title, tags);
-  return makeClickableCard(card, request, "request");
+  tags.append(makeTag(request.status, "status"), makeTag(request.type, "type"), makeTag(request.priority, "priority"));
+  const linkedItems = (request.resolved_backlog_items || [])
+    .map((id) => state.data.backlog.find((item) => item.id === id))
+    .filter(Boolean);
+  const missingIds = request.unresolved_work_items || [];
+  if (linkedItems.length) tags.append(makeLinkStateTag(countLabel(linkedItems.length, "linked work item"), "linked"));
+  if (request.work_items_explicitly_none) tags.append(makeLinkStateTag("no work required", "intentional"));
+  if (missingIds.length) tags.append(makeLinkStateTag(countLabel(missingIds.length, "missing reference"), "missing"));
+  if (!linkedItems.length && !missingIds.length && !request.work_items_explicitly_none) tags.append(makeLinkStateTag("unlinked", "unlinked"));
+
+  const relationships = document.createElement("div");
+  relationships.className = "link-relationships";
+  const relationshipHeading = document.createElement("h4");
+  relationshipHeading.textContent = "Work items";
+  relationships.append(relationshipHeading);
+  for (const item of linkedItems) relationships.append(renderLinkedWorkItem(item));
+  for (const id of missingIds) relationships.append(renderLinkNotice(id, "Referenced by this request, but no matching work item exists.", "missing"));
+  if (!linkedItems.length && !missingIds.length) {
+    relationships.append(request.work_items_explicitly_none
+      ? renderLinkNotice("", "This request is explicitly marked as requiring no delivery work.", "intentional")
+      : renderLinkNotice("", "No work item is linked. Review this request during refinement.", "unlinked"));
+  }
+  card.append(top, summary, tags, relationships);
+  return card;
 }
 
 function renderList(container, items, renderer) {
@@ -588,8 +818,9 @@ function renderRelease() {
     goal.className = "release-goal";
     const heading = document.createElement("h3");
     heading.textContent = "Release goal";
-    const text = document.createElement("p");
-    text.textContent = release.release_goal;
+    const text = document.createElement("div");
+    text.className = "release-goal-copy";
+    text.append(renderReleaseMarkdown(release.release_goal));
     goal.append(heading, text);
     elements.releaseOverview.append(goal);
   }
@@ -609,7 +840,7 @@ function renderRelease() {
     heading.textContent = humanKey(key);
     const content = document.createElement("div");
     content.className = "release-copy";
-    content.textContent = value;
+    content.append(renderReleaseMarkdown(value));
     section.append(heading, content);
     elements.releaseSections.append(section);
   }
@@ -617,13 +848,18 @@ function renderRelease() {
 
 function renderHealth() {
   const health = state.data.health;
-  const errors = makeTag(`${health.summary.errors} errors`);
+  const codes = uniqueValues(health.findings, "code");
+  const errors = makeTag(countLabel(health.summary.errors, "error"));
   errors.classList.add("severity-error");
-  const warnings = makeTag(`${health.summary.warnings} warnings`);
+  const warnings = makeTag(countLabel(health.summary.warnings, "warning"));
   warnings.classList.add("severity-warning");
-  elements.healthSummary.replaceChildren(errors, warnings);
+  const recommendations = makeTag(countLabel(health.summary.recommendations ?? 0, "recommendation"));
+  recommendations.classList.add("severity-recommendation");
+  elements.healthSummary.replaceChildren(errors, warnings, recommendations);
+  setMultiOptions(elements.healthCodeFilterMenu, state.healthCodes, codes);
+  elements.healthCodeFilterLabel.textContent = selectedLabel(state.healthCodes, "All codes");
   elements.healthFilters.replaceChildren();
-  for (const severity of ["error", "warning"]) {
+  for (const severity of ["error", "warning", "recommendation"]) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `health-filter ${state.healthSeverities.has(severity) ? "is-active" : ""}`;
@@ -636,28 +872,52 @@ function renderHealth() {
     elements.healthFilters.append(button);
   }
   elements.healthList.replaceChildren();
-  const findings = health.findings.filter((entry) => state.healthSeverities.has(entry.severity));
-  if (!findings.length) elements.healthList.append(emptyNode(health.summary.total ? "No findings match this severity filter." : "No conformance findings."));
+  const findings = health.findings.filter((entry) =>
+    state.healthSeverities.has(entry.severity)
+    && (!state.healthCodes.size || state.healthCodes.has(entry.code))
+  );
+  elements.healthFindingCount.textContent = `${findings.length} shown of ${health.findings.length}`;
+  if (!findings.length) elements.healthList.append(emptyNode(health.summary.total ? "No findings match the current Health filters." : "No conformance findings."));
   for (const item of findings) {
     const card = document.createElement("article");
-    card.className = `health-card severity-${item.severity}`;
-    const marker = document.createElement("span");
-    marker.className = "health-marker";
-    marker.textContent = item.severity;
-    const copy = document.createElement("div");
+    card.className = `item-card health-card severity-${item.severity}`;
+    const top = document.createElement("div");
+    top.className = "item-topline";
+    const code = document.createElement("span");
+    code.className = "item-id";
+    code.textContent = item.code;
     const title = document.createElement("h3");
+    title.className = "item-title";
     title.textContent = item.title;
-    const message = document.createElement("p");
-    message.textContent = item.message;
     const meta = document.createElement("span");
     meta.className = "meta";
-    meta.textContent = [item.code, item.entity_id].filter(Boolean).join(" · ");
-    const action = document.createElement("span");
-    action.className = "health-action";
-    action.textContent = "View details →";
-    action.setAttribute("aria-hidden", "true");
-    copy.append(title, message, meta);
-    card.append(marker, copy, action);
+    meta.textContent = item.entity_id || "project";
+    top.append(code, title, meta);
+    const meaning = document.createElement("p");
+    meaning.className = "item-summary health-meaning";
+    meaning.textContent = item.meaning;
+    const message = document.createElement("p");
+    message.className = "item-summary health-observed";
+    message.textContent = `Observed: ${truncate(item.message, 220)}`;
+    const nextStep = document.createElement("p");
+    nextStep.className = "health-next-step";
+    const nextStepLabel = document.createElement("strong");
+    nextStepLabel.textContent = `${humanKey(item.action_type || "action")}: `;
+    nextStep.append(nextStepLabel, document.createTextNode(truncate(item.recommended_action, 320)));
+    if (item.command) {
+      const command = document.createElement("code");
+      command.className = "health-command";
+      command.textContent = item.command;
+      nextStep.append(" ", command);
+    }
+    const tags = document.createElement("div");
+    tags.className = "tag-row";
+    tags.append(
+      makeTag(item.severity, "severity"),
+      makeTag(item.action_type || "action"),
+      makeTag(item.entity_type || "project"),
+    );
+    card.append(top, meaning, message, nextStep, tags);
     elements.healthList.append(makeClickableCard(card, item, "health"));
   }
 }
@@ -700,6 +960,7 @@ function syncUrl(mode = "replace") {
   if (state.backlogItemIds.size) params.set("work", [...state.backlogItemIds].join(","));
   if (state.deliveredRelease) params.set("release", state.deliveredRelease);
   if (state.unlinkedOnly) params.set("unlinked", "1");
+  if (state.healthCodes.size) params.set("health-code", [...state.healthCodes].join(","));
   const url = `${location.pathname}${params.size ? `?${params}` : ""}`;
   history[mode === "push" ? "pushState" : "replaceState"]({}, "", url);
 }
@@ -716,6 +977,7 @@ function loadUrlState() {
   state.backlogItemIds = list("work");
   state.deliveredRelease = params.get("release") || "";
   state.unlinkedOnly = params.get("unlinked") === "1";
+  state.healthCodes = list("health-code");
   state.hasAppliedDefaultStatuses = params.has("status");
   elements.searchInput.value = state.query;
 }
@@ -768,7 +1030,7 @@ function render() {
   renderList(elements.linkList, filteredRequests, renderLinkCard);
   elements.requestCount.textContent = `${filteredRequests.length} shown of ${requests.length}`;
   elements.backlogCount.textContent = `${filteredBacklog.length} shown of ${backlog.length}`;
-  elements.linkCount.textContent = `${filteredRequests.length} shown`;
+  elements.linkCount.textContent = `${filteredRequests.length} shown of ${requests.length}`;
 
   renderChart(elements.requestStatusChart, countBy(filteredRequests, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "requests", statuses: [status] }) });
   renderChart(elements.backlogStatusChart, countBy(filteredBacklog, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "backlog", statuses: [status] }) });
@@ -780,7 +1042,7 @@ function render() {
   renderChart(elements.requestPriorityChart, countBy(filteredRequests, "priority"), { kind: "priority" });
   renderChart(elements.requestSectionChart, countBy(filteredRequests, "section"));
   renderChart(elements.requestLinkCoverageChart, filteredRequests.reduce((counts, request) => {
-    const key = request.resolved_backlog_items.length ? "Linked to backlog" : request.work_items_explicitly_none ? "No work required" : "No backlog item";
+    const key = request.resolved_backlog_items.length ? "Linked to work item" : request.work_items_explicitly_none ? "No work required" : "No work item";
     counts[key] = (counts[key] || 0) + 1;
     return counts;
   }, {}));
@@ -821,7 +1083,11 @@ function toggleFilter(filter, button) {
 }
 
 function closeFilters(except = null) {
-  for (const [filter, button] of [[elements.statusFilter, elements.statusFilterButton], [elements.typeFilter, elements.typeFilterButton]]) {
+  for (const [filter, button] of [
+    [elements.statusFilter, elements.statusFilterButton],
+    [elements.typeFilter, elements.typeFilterButton],
+    [elements.healthCodeFilter, elements.healthCodeFilterButton],
+  ]) {
     if (filter === except) continue;
     filter.classList.remove("is-open");
     button.setAttribute("aria-expanded", "false");
@@ -846,14 +1112,32 @@ elements.refreshButton.addEventListener("click", () => loadData().catch(showErro
 elements.searchInput.addEventListener("input", (event) => { state.query = event.target.value; renderAndSync(); });
 elements.statusFilterButton.addEventListener("click", () => { closeFilters(elements.statusFilter); toggleFilter(elements.statusFilter, elements.statusFilterButton); });
 elements.typeFilterButton.addEventListener("click", () => { closeFilters(elements.typeFilter); toggleFilter(elements.typeFilter, elements.typeFilterButton); });
+elements.healthCodeFilterButton.addEventListener("click", () => { closeFilters(elements.healthCodeFilter); toggleFilter(elements.healthCodeFilter, elements.healthCodeFilterButton); });
 elements.statusFilterMenu.addEventListener("change", (event) => handleMultiFilter(event, state.statuses));
 elements.typeFilterMenu.addEventListener("change", (event) => handleMultiFilter(event, state.types));
+elements.healthCodeFilterMenu.addEventListener("change", (event) => handleMultiFilter(event, state.healthCodes));
 elements.resetFiltersButton.addEventListener("click", () => {
   state.hasAppliedDefaultStatuses = true;
   applyFilters({ view: state.view, statuses: [...defaultStatuses()] });
 });
-elements.moreChartsLink.addEventListener("click", () => { closeFilters(); setPage("charts"); render(); });
-elements.backToViewerLink.addEventListener("click", () => { setPage("viewer"); setView(state.view, false); render(); });
+elements.resetHealthFiltersButton.addEventListener("click", () => {
+  state.healthSeverities = new Set(["error", "warning", "recommendation"]);
+  state.healthCodes.clear();
+  closeFilters();
+  renderAndSync();
+});
+elements.moreChartsLink.addEventListener("click", () => {
+  closeFilters();
+  setPage("charts");
+  render();
+  window.scrollTo({ top: 0, left: 0 });
+});
+elements.backToViewerLink.addEventListener("click", () => {
+  setPage("viewer");
+  setView(state.view, false);
+  render();
+  window.scrollTo({ top: 0, left: 0 });
+});
 byId("unlinkedRequestsButton").addEventListener("click", () => applyFilters({ view: "requests", unlinkedOnly: true }));
 byId("inboxRequestsButton").addEventListener("click", () => applyFilters({ view: "requests", statuses: ["inbox"] }));
 byId("activeReleaseRequestsButton").addEventListener("click", () => setView("release"));
@@ -863,7 +1147,9 @@ byId("healthWarningsButton").addEventListener("click", () => { state.healthSever
 elements.modalCloseButton.addEventListener("click", closeDetailsModal);
 elements.detailsModal.addEventListener("click", (event) => { if (event.target === elements.detailsModal) closeDetailsModal(); });
 for (const button of document.querySelectorAll(".primary-tab")) button.addEventListener("click", () => { setView(button.dataset.view); render(); });
-document.addEventListener("click", (event) => { if (!elements.statusFilter.contains(event.target) && !elements.typeFilter.contains(event.target)) closeFilters(); });
+document.addEventListener("click", (event) => {
+  if (![elements.statusFilter, elements.typeFilter, elements.healthCodeFilter].some((filter) => filter.contains(event.target))) closeFilters();
+});
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDetailsModal(); });
 window.addEventListener("popstate", () => { loadUrlState(); if (state.data) render(); });
 

@@ -68,8 +68,96 @@ function calculateWidgets(requests, backlog, activeRelease, health) {
   };
 }
 
+const FINDING_GUIDANCE = {
+  ANNOTATED_COMPLETION_VALUE: ({ message, entity }) => ({
+    action_type: "fix",
+    meaning: "The release version was recognised, but the parenthesised note is legacy text in a machine-readable completion field. Commands may discard or misinterpret that note.",
+    recommended_action: `In ${entity.entity_id}, replace "${message}" with only the release version. Move the parenthesised explanation to ${entity.entity_type === "request" ? "Notes:" : "remaining:"} if it still matters.`,
+  }),
+  INVALID_COMPLETION_VALUE: ({ message, entity }) => ({
+    action_type: "fix",
+    meaning: "Completion fields accept only a release version or SPIKE: <work-item ID>. This free text cannot be linked to durable delivery evidence or safely processed by pruning.",
+    recommended_action: `In ${entity.entity_id}, replace "${message}" with the actual release version, or SPIKE: <work-item ID> when a spike document is the deliverable. If neither exists, move the prose to ${entity.entity_type === "request" ? "Notes:" : "remaining:"} and review whether the item should be marked done.`,
+  }),
+  MISSING_AGENT_PATH: ({ entity }) => ({
+    action_type: "review",
+    meaning: "An exact path in this agent's owns, excludes, or reads rules does not exist in the project. The rule may be stale, misspelled, or describe a directory that has not been created yet.",
+    recommended_action: `Review ${entity.entity_id} in project.yml. Correct or remove the stale path, or create the intended directory, then regenerate the agent roster.`,
+    command: "/work-init --repair",
+  }),
+  REQUEST_SECTION_STRUCTURE: () => ({
+    action_type: "fix",
+    meaning: "The current model uses exactly four request sections. Extra legacy sections make status-based automation unreliable because section placement carries meaning.",
+    recommended_action: "In requests.md, keep the four canonical sections in the displayed order. Move partially-done and blocked requests into Refined requests; move deferred, rejected, and duplicate requests into Deferred / rejected; then remove the legacy headings.",
+  }),
+  REQUEST_ID_FORMAT: ({ entity }) => ({
+    action_type: "review",
+    meaning: "The request ID does not use the prefix or zero-padding declared by project.yml. Pattern matching and cross-references may miss it.",
+    recommended_action: `If ${entity.entity_id} is still live, rename it and every reference to it together so it matches the manifest format. If it is old completed history, consider pruning it instead of rewriting historical IDs.`,
+    command: "/work-prune",
+  }),
+  WORK_ID_FORMAT: ({ entity }) => ({
+    action_type: "review",
+    meaning: "The work-item ID does not use the prefix or zero-padding declared by project.yml. Pattern matching and cross-references may miss it.",
+    recommended_action: `If ${entity.entity_id} is still live, rename it and every request, dependency, release, and spike-document reference together. If it is old completed history, consider pruning it instead.`,
+    command: "/work-prune",
+  }),
+  UNKNOWN_REQUEST_FIELD: ({ title, entity }) => {
+    const field = title.replace(/^(?:Move\s+)?(?:Unknown|Unsupported) request field:\s*/i, "");
+    const normalised = field.toLowerCase();
+    let action = `Move the value on ${entity.entity_id} into a supported field such as Notes: or Summary:, then remove the unsupported ${field}: line.`;
+    if (normalised === "note") action = `Rename Note: to Notes: on ${entity.entity_id}.`;
+    if (normalised === "remaining") action = `Move the Remaining: text into Notes: on ${entity.entity_id}, then remove the Remaining: line. Partially-done requests record remaining scope in Notes:.`;
+    return {
+      action_type: "fix",
+      meaning: `Requests do not define a ${field}: field, so the plugin cannot treat this value as structured metadata and may not preserve it during automation.`,
+      recommended_action: action,
+    };
+  },
+  RELEASE_STATUS_DRIFT: ({ entity }) => ({
+    action_type: "fix",
+    meaning: "The active-release snapshot and backlog disagree about this work item's status, so the release view may report stale progress.",
+    recommended_action: `Check ${entity.entity_id} in backlog.yml, then update the matching active-release.md row to the same status. If the backlog value is wrong, correct it first and keep both files aligned.`,
+  }),
+  VCS_MISMATCH: () => ({
+    action_type: "review",
+    meaning: "project.yml declares Git ownership rules, but the resolved project root has no .git directory. Release commands cannot safely follow the declared VCS workflow.",
+    recommended_action: "Confirm the viewer is pointed at the real repository root. If this project intentionally has no Git repository, change vcs.system in project.yml; otherwise initialise or restore the missing repository metadata.",
+  }),
+  MISSING_CHANGELOG: () => ({
+    action_type: "fix",
+    meaning: "The changelog path declared by project.yml does not exist, so releases and pruning have no durable narrative record to verify against.",
+    recommended_action: "Create the configured changelog file, or correct paths.changelog in project.yml to the existing file before running release or prune commands.",
+  }),
+  PRUNING_HYGIENE: () => ({
+    action_type: "maintenance",
+    meaning: "Old completed records are still valid, but they are making the live work files larger and harder to scan. No immediate correctness fix is required.",
+    recommended_action: "Run the prune command when convenient. It will present the eligible records and durable evidence for approval before removing anything.",
+    command: "/work-prune",
+  }),
+};
+
 function finding(severity, code, title, message, entity = {}) {
-  return { severity, code, title, message, ...entity };
+  const context = { severity, code, title, message, entity };
+  const specific = FINDING_GUIDANCE[code]?.(context) || {};
+  const fallback = severity === "error"
+    ? {
+      action_type: "required",
+      meaning: "This value violates the current work-management model and may make commands or release state unreliable.",
+      recommended_action: `Correct the value described below${entity.entity_id ? ` on ${entity.entity_id}` : ""} so it matches project.yml and the current plugin schema.`,
+    }
+    : severity === "recommendation"
+      ? {
+        action_type: "maintenance",
+        meaning: "This is optional guidance that may improve the project or its work-management hygiene. It is not a correctness problem.",
+        recommended_action: `Consider the suggestion described below${entity.entity_id ? ` for ${entity.entity_id}` : ""} when convenient.`,
+      }
+    : {
+      action_type: "review",
+      meaning: "This value differs from the current work-management model and may represent intentional legacy data or drift.",
+      recommended_action: `Review the value described below${entity.entity_id ? ` on ${entity.entity_id}` : ""} and update it to the current schema if the difference is not intentional.`,
+    };
+  return { severity, code, title, ...fallback, ...specific, message, ...entity };
 }
 
 function validVersion(value, scheme) {
@@ -88,9 +176,9 @@ function validateCompletion(findings, owner, kind, values, scheme, ids) {
       continue;
     }
     if (completion.kind !== "release" || !validVersion(completion.value, scheme)) {
-      findings.push(finding("warning", "INVALID_COMPLETION_VALUE", "Completion value is not a release or spike marker", completion.raw, owner));
+      findings.push(finding("warning", "INVALID_COMPLETION_VALUE", "Replace this free-text completion value", completion.raw, owner));
     } else if (completion.annotation) {
-      findings.push(finding("warning", "ANNOTATED_COMPLETION_VALUE", "Completion metadata contains legacy annotation text", completion.raw, owner));
+      findings.push(finding("warning", "ANNOTATED_COMPLETION_VALUE", "Remove explanatory text from this completion value", completion.raw, owner));
     }
   }
 }
@@ -153,7 +241,7 @@ async function validatePathsAndOwnership(findings, config) {
       findings.push(finding(
         "warning",
         "MISSING_AGENT_PATH",
-        "Agent path does not exist",
+        "Review this missing agent path",
         `${entry.agent} ${entry.kind} ${entry.rule}`,
         { entity_type: "agent", entity_id: entry.agent },
       ));
@@ -178,7 +266,7 @@ function compareRequestSections(findings, metadata) {
     findings.push(finding(
       "warning",
       "REQUEST_SECTION_STRUCTURE",
-      "requests.md does not use the four canonical sections in order",
+      "Merge legacy request sections into the current layout",
       `Expected: ${REQUEST_SECTIONS.join(" → ")}. Found: ${actual.join(" → ") || "none"}.`,
       { entity_type: "file", entity_id: "requests.md" },
     ));
@@ -221,12 +309,12 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
 
   for (const request of requests) {
     const owner = { entity_type: "request", entity_id: request.id };
-    if (!hasExpectedPadding(request.id, config.ids.requestPrefix, config.ids.pad)) findings.push(finding("warning", "REQUEST_ID_FORMAT", "Request ID does not match the manifest padding", `Expected ${config.ids.requestPrefix}-${"0".repeat(config.ids.pad - 1)}1; found ${request.id}.`, owner));
+    if (!hasExpectedPadding(request.id, config.ids.requestPrefix, config.ids.pad)) findings.push(finding("warning", "REQUEST_ID_FORMAT", "Review this request ID format", `Expected ${config.ids.requestPrefix}-${"0".repeat(config.ids.pad - 1)}1; found ${request.id}.`, owner));
     if (!REQUEST_STATUSES.includes(request.status)) findings.push(finding("error", "INVALID_REQUEST_STATUS", "Invalid request status", request.status || "missing", owner));
     if (!requestTypes.has(request.type)) findings.push(finding("error", "INVALID_REQUEST_TYPE", "Request type is outside the manifest taxonomy", request.type || "missing", owner));
     if (!priorities.has(request.priority)) findings.push(finding("error", "INVALID_PRIORITY", "Request priority is outside the manifest taxonomy", request.priority || "missing", owner));
     if (request.request_id && request.request_id.toUpperCase() !== request.id) findings.push(finding("error", "REQUEST_ID_MISMATCH", "Request heading and Request ID disagree", `${request.id} / ${request.request_id}`, owner));
-    for (const unknown of request.unknown_fields || []) findings.push(finding("warning", "UNKNOWN_REQUEST_FIELD", `Unknown request field: ${unknown.name}`, `Line ${unknown.line}: ${unknown.value}`, owner));
+    for (const unknown of request.unknown_fields || []) findings.push(finding("warning", "UNKNOWN_REQUEST_FIELD", `Move unsupported request field: ${unknown.name}`, `Line ${unknown.line}: ${unknown.value}`, owner));
     if (request.status === "blocked" && !request.blocked_on) findings.push(finding("error", "BLOCKED_WITHOUT_REASON", "Blocked request is missing Blocked on", "Add the named dependency.", owner));
     if (request.status === "deferred" && request.blocked_on) findings.push(finding("error", "DEFERRED_WITH_BLOCKER", "Deferred request carries Blocked on", request.blocked_on, owner));
     if (["done", "partially-done"].includes(request.status) && !(request.done_in || []).length) findings.push(finding("error", "COMPLETION_MISSING", "Completed request is missing Done in", request.status, owner));
@@ -237,7 +325,7 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
 
   for (const item of backlog) {
     const owner = { entity_type: "work", entity_id: item.id };
-    if (!hasExpectedPadding(item.id, config.ids.workPrefix, config.ids.pad)) findings.push(finding("warning", "WORK_ID_FORMAT", "Work-item ID does not match the manifest padding", `Expected ${config.ids.workPrefix}-${"0".repeat(config.ids.pad - 1)}1; found ${item.id}.`, owner));
+    if (!hasExpectedPadding(item.id, config.ids.workPrefix, config.ids.pad)) findings.push(finding("warning", "WORK_ID_FORMAT", "Review this work-item ID format", `Expected ${config.ids.workPrefix}-${"0".repeat(config.ids.pad - 1)}1; found ${item.id}.`, owner));
     if (!WORK_STATUSES.includes(item.status)) findings.push(finding("error", "INVALID_WORK_STATUS", "Invalid work-item status", item.status || "missing", owner));
     if (!workTypes.has(item.type)) findings.push(finding("error", "INVALID_WORK_TYPE", "Work-item type is outside the manifest taxonomy", item.type || "missing", owner));
     if (!priorities.has(item.priority)) findings.push(finding("error", "INVALID_PRIORITY", "Work-item priority is outside the manifest taxonomy", item.priority || "missing", owner));
@@ -271,26 +359,32 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     }
     selected.live_status = live.status;
     selected.live_item = live;
-    if (selected.status && selected.status !== live.status) findings.push(finding("warning", "RELEASE_STATUS_DRIFT", "Active-release item status differs from backlog", `${selected.id}: release says ${selected.status}; backlog says ${live.status}.`, { entity_type: "work", entity_id: selected.id }));
+    if (selected.status && selected.status !== live.status) findings.push(finding("warning", "RELEASE_STATUS_DRIFT", "Synchronise active-release and backlog status", `${selected.id}: release says ${selected.status}; backlog says ${live.status}.`, { entity_type: "work", entity_id: selected.id }));
     if (selected.source && live.source_request && selected.source !== live.source_request) findings.push(finding("error", "RELEASE_SOURCE_DRIFT", "Active-release source differs from backlog", `${selected.id}: ${selected.source} / ${live.source_request}`, { entity_type: "work", entity_id: selected.id }));
   }
 
-  if (manifest.vcs.system === "git" && !(await exists(path.join(config.root, ".git")))) findings.push(finding("warning", "VCS_MISMATCH", "Manifest declares Git but no repository metadata is present", config.root, { entity_type: "manifest", entity_id: "vcs.system" }));
+  if (manifest.vcs.system === "git" && !(await exists(path.join(config.root, ".git")))) findings.push(finding("warning", "VCS_MISMATCH", "Review the Git repository mismatch", config.root, { entity_type: "manifest", entity_id: "vcs.system" }));
   if (manifest.vcs.system === "none" && !manifest.version.file) findings.push(finding("error", "VERSION_FILE_REQUIRED", "A non-Git project requires version.file", "There is no tag to hold the version.", { entity_type: "manifest", entity_id: "version.file" }));
-  if (config.files.changelog && !(await exists(config.files.changelog))) findings.push(finding("warning", "MISSING_CHANGELOG", "Configured changelog does not exist", config.files.changelog, { entity_type: "manifest", entity_id: "paths.changelog" }));
+  if (config.files.changelog && !(await exists(config.files.changelog))) findings.push(finding("warning", "MISSING_CHANGELOG", "Create or correct the configured changelog", config.files.changelog, { entity_type: "manifest", entity_id: "paths.changelog" }));
   await validatePathsAndOwnership(findings, config);
 
   const releases = [...new Set(releaseNumbers([...requests.map((request) => request.done_in), ...backlog.map((item) => item.done_in)]))].sort(compareVersions);
   const recent = new Set(releases.slice(0, 3));
   const oldDone = [...requests, ...backlog].filter((item) => item.status === "done" && (item.done_in || []).some((entry) => entry.kind === "release" && !recent.has(entry.value)));
-  if (oldDone.length > 25) findings.push(finding("warning", "PRUNING_HYGIENE", "Completed history appears ready for pruning", `${oldDone.length} done records are older than the three most recent releases. Consider /work-prune.`, { entity_type: "project", entity_id: manifest.project.name }));
+  if (oldDone.length > 25) findings.push(finding("recommendation", "PRUNING_HYGIENE", "Review old completed records for pruning", `${oldDone.length} done records are older than the three most recent releases.`, { entity_type: "project", entity_id: manifest.project.name }));
 
-  findings.sort((left, right) => (left.severity === right.severity ? left.code.localeCompare(right.code) : left.severity === "error" ? -1 : 1));
+  const severityRank = { error: 0, warning: 1, recommendation: 2 };
+  findings.sort((left, right) => (
+    left.severity === right.severity
+      ? left.code.localeCompare(right.code)
+      : (severityRank[left.severity] ?? 99) - (severityRank[right.severity] ?? 99)
+  ));
   return {
     findings,
     summary: {
       errors: findings.filter((entry) => entry.severity === "error").length,
       warnings: findings.filter((entry) => entry.severity === "warning").length,
+      recommendations: findings.filter((entry) => entry.severity === "recommendation").length,
       total: findings.length,
     },
   };
@@ -318,6 +412,7 @@ module.exports = {
   buildHealth,
   calculateWidgets,
   compareVersions,
+  createFinding: finding,
   createSummaries,
   linkModel,
 };
