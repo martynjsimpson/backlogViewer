@@ -652,8 +652,12 @@ function renderHealth() {
     const meta = document.createElement("span");
     meta.className = "meta";
     meta.textContent = [item.code, item.entity_id].filter(Boolean).join(" · ");
+    const action = document.createElement("span");
+    action.className = "health-action";
+    action.textContent = "View details →";
+    action.setAttribute("aria-hidden", "true");
     copy.append(title, message, meta);
-    card.append(marker, copy);
+    card.append(marker, copy, action);
     elements.healthList.append(makeClickableCard(card, item, "health"));
   }
 }

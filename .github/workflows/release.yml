@@ -23,7 +23,9 @@ jobs:
       - run: npm test
       - name: Read package version
         id: version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Create release if new
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

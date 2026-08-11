@@ -5,6 +5,21 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-11
+
+### Changed
+
+- Linked the README to the companion Work Management Claude Plugin and clarified that one central
+  viewer installation can inspect multiple projects.
+- Made Health findings visibly interactive with a pointer cursor, hover and keyboard-focus states,
+  and an explicit `View details` action.
+
+### Fixed
+
+- Restored colored bar fills in breakdown charts by giving percentage-width fills a block layout.
+- Corrected the documented development command to target the fixture manifest explicitly.
+- Repaired shell quoting in the release workflow's package-version output step.
+
 ## [0.1.0] - 2026-08-11
 
 ### Added

@@ -1,7 +1,11 @@
 # Work Management Viewer
 
 A local dashboard and conformance checker for projects using the manifest-driven
-`Request → Work item → Active release → Done` model from the work-management Claude plugin.
+`Request → Work item → Active release → Done` model from the
+[Work Management Claude Plugin](https://github.com/martynjsimpson/workManagementClaudePlugin).
+
+The companion plugin creates and manages the work files in each project; this viewer reads and
+visualizes those files from one central installation.
 
 The viewer is read-only with respect to project planning files. It reads `project.yml`, derives
 all paths, identifiers, taxonomies, and agents from the manifest, and refreshes its data directly
@@ -84,7 +88,7 @@ temporary environments.
 
 ```sh
 npm test
-node server.js --project test/fixtures/custom-project --port 5178
+node server.js --project test/fixtures/custom-project/project.yml --port 5178
 ```
 
 The test suite uses `node:test` and covers manifest discovery and compatibility, custom prefixes,

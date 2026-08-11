@@ -379,6 +379,7 @@ button.bar-row:hover {
 }
 
 .bar-fill {
+  display: block;
   height: 100%;
   min-width: 2px;
   border-radius: inherit;
@@ -1131,7 +1132,7 @@ button.bar-row:hover {
 
 .health-card {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
   gap: 13px;
   align-items: start;
   border: 1px solid var(--line);
@@ -1139,6 +1140,18 @@ button.bar-row:hover {
   border-radius: 8px;
   background: var(--surface-raised);
   padding: 13px;
+  cursor: pointer;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.health-card:hover {
+  background: var(--surface-soft);
+  box-shadow: 0 0 0 1px var(--hover-line);
+}
+
+.health-card:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
 }
 
 .health-card.severity-error {
@@ -1155,6 +1168,19 @@ button.bar-row:hover {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.health-action {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.health-card:hover .health-action,
+.health-card:focus-visible .health-action {
+  color: var(--blue);
 }
 
 .tag.severity-error,
