@@ -22,11 +22,12 @@ const elements = {
   projectTitle: byId("projectTitle"),
   projectDescription: byId("projectDescription"),
   loadedAt: byId("loadedAt"),
+  loadedModelText: byId("loadedModelText"),
+  loadedAtTime: byId("loadedAtTime"),
   headerReleaseBadge: byId("headerReleaseBadge"),
   headerReleaseStatus: byId("headerReleaseStatus"),
   liveStatusButton: byId("liveStatusButton"),
   liveStatusText: byId("liveStatusText"),
-  refreshButton: byId("refreshButton"),
   backToViewerLink: byId("backToViewerLink"),
   summaryGrid: byId("summaryGrid"),
   homeCharts: byId("homeCharts"),
@@ -1154,6 +1155,12 @@ function formatUpdateTime(value) {
   return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(value);
 }
 
+function setLoadedAt(primary, secondary = "") {
+  elements.loadedModelText.textContent = primary;
+  elements.loadedAtTime.textContent = secondary;
+  elements.loadedAt.setAttribute("aria-label", [primary, secondary].filter(Boolean).join(" "));
+}
+
 function updateModel(payload, source) {
   const signature = dataSignature(payload);
   const changed = signature !== currentDataSignature;
@@ -1163,7 +1170,7 @@ function updateModel(payload, source) {
   elements.projectDescription.textContent = payload.project.description;
   document.title = `${payload.project.name} · Work Management Viewer`;
   const loaded = new Date(payload.generated_at);
-  elements.loadedAt.textContent = `Loaded model v${payload.project.manifest.model_version} at ${loaded.toLocaleString()}`;
+  setLoadedAt(`Loaded model v${payload.project.manifest.model_version}`, `at ${loaded.toLocaleString()}`);
   elements.loadedAt.classList.remove("load-error");
   elements.loadedAt.title = Object.values(payload.files).filter(Boolean).join("\n");
   if (changed) {
@@ -1197,14 +1204,13 @@ function updateModel(payload, source) {
   return changed;
 }
 
-async function loadData(source = "manual") {
+async function loadData(source = "fallback") {
   if (dataLoadPromise) {
     loadQueued = true;
-    queuedLoadSource = source === "manual" ? "manual" : queuedLoadSource;
+    queuedLoadSource = source === "live" ? "live" : queuedLoadSource;
     return dataLoadPromise;
   }
-  if (source === "initial") elements.loadedAt.textContent = "Reading manifest and work files…";
-  if (source === "manual") elements.refreshButton.disabled = true;
+  if (source === "initial") setLoadedAt("Reading manifest and work files…");
   if (source === "live") setLiveStatus("updating", "Updating…");
   dataLoadPromise = (async () => {
     const response = await fetch(`/api/data?now=${Date.now()}`, { cache: "no-store" });
@@ -1221,7 +1227,6 @@ async function loadData(source = "manual") {
     return false;
   } finally {
     dataLoadPromise = null;
-    elements.refreshButton.disabled = false;
     if (loadQueued) {
       const nextSource = queuedLoadSource;
       loadQueued = false;
@@ -1308,14 +1313,13 @@ function handleMultiFilter(event, selected) {
 }
 
 function showError(error) {
-  elements.loadedAt.textContent = error.message;
+  setLoadedAt(error.message);
   elements.loadedAt.classList.add("load-error");
   setLiveStatus("unavailable", "Unable to load", { title: error.message });
   console.error(error);
 }
 
 loadUrlState();
-elements.refreshButton.addEventListener("click", () => loadData("manual").catch(showError));
 elements.liveStatusButton.addEventListener("click", () => {
   state.livePaused = !state.livePaused;
   if (state.livePaused) {

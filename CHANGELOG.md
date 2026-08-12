@@ -5,6 +5,11 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Condensed the header by removing the redundant Refresh button and moving the model timestamp and
+  live-update control into its right-hand position.
+
 ## [0.5.0] - 2026-08-12
 
 ### Added

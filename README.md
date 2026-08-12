@@ -64,8 +64,8 @@ history behaves normally. Search accepts text and qualified terms such as `statu
 
 The viewer watches the selected project and updates automatically as agents change its files. A
 small header indicator shows whether updates are live, being applied, paused, reconnecting, or
-using periodic fallback checks. Click the indicator to pause or resume live updates; the Refresh
-button remains available as a manual fallback.
+using periodic fallback checks. Click the indicator to pause or resume live updates; resuming also
+checks immediately for any changes made while updates were paused.
 
 Updates replace only the in-memory model, not the page. The current tab, URL-backed filters, search,
 scroll position, keyboard focus, and open details modal are retained. Rapid file events are grouped

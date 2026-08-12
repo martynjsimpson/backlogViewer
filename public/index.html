@@ -14,20 +14,20 @@
           <span class="header-eyebrow">Work Management Viewer</span>
           <h1 id="projectTitle">Loading project…</h1>
           <p id="projectDescription" class="project-description"></p>
-          <div class="header-meta">
-            <p id="loadedAt">Loading local planning files...</p>
-            <button id="liveStatusButton" class="live-status state-connecting" type="button" aria-pressed="true">
-              <span class="live-status-dot" aria-hidden="true"></span>
-              <span id="liveStatusText" aria-live="polite">Connecting…</span>
-            </button>
-          </div>
       </div>
       <button id="headerReleaseBadge" class="tag header-release-badge status-none" type="button" disabled>
         <span class="header-release-label">Active release</span>
         <strong id="headerReleaseStatus" aria-live="polite">Loading…</strong>
       </button>
       <div class="header-actions">
-        <button id="refreshButton" type="button">Refresh</button>
+        <p id="loadedAt">
+          <span id="loadedModelText">Loading local planning files...</span>
+          <span id="loadedAtTime" class="loaded-at-time"></span>
+        </p>
+        <button id="liveStatusButton" class="live-status state-connecting" type="button" aria-pressed="true">
+          <span class="live-status-dot" aria-hidden="true"></span>
+          <span id="liveStatusText" aria-live="polite">Connecting…</span>
+        </button>
       </div>
     </header>
 
