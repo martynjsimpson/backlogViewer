@@ -64,3 +64,22 @@ test("recovers from a corrupt derived history file", async (context) => {
   assert.equal(history.snapshots.length, 1);
   assert.deepEqual(history.current, { openRequests: 4 });
 });
+
+test("does not rewrite metric history when values are unchanged", async (context) => {
+  const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-history-stable-"));
+  process.env.WORK_MANAGEMENT_VIEWER_STATE_DIR = stateRoot;
+  context.after(async () => {
+    delete process.env.WORK_MANAGEMENT_VIEWER_STATE_DIR;
+    await fs.rm(stateRoot, { recursive: true, force: true });
+  });
+
+  const project = path.join(stateRoot, "project");
+  const stateFile = stateFileForProject(project);
+  await updateWidgetHistory(project, { openRequests: 4 });
+  const before = await fs.stat(stateFile);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await updateWidgetHistory(project, { openRequests: 4 });
+  const after = await fs.stat(stateFile);
+
+  assert.equal(after.mtimeMs, before.mtimeMs);
+});

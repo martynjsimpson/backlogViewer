@@ -1,11 +1,12 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const http = require("node:http");
+const { EventEmitter } = require("node:events");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { loadProjectConfiguration } = require("../src/config");
-const { createServer, getArg, isAllowedHost } = require("../server");
+const { createProjectChangeFeed, createServer, getArg, isAllowedHost, shouldIgnoreWatchPath } = require("../server");
 
 const fixtureManifest = path.join(__dirname, "fixtures", "custom-project", "project.yml");
 
@@ -44,6 +45,48 @@ test("rejects CLI options without values", () => {
   assert.throws(() => getArg(["--project", "--port", "5178"], "--project"), /Missing value for --project/);
 });
 
+test("debounces project changes and ignores generated dependency paths", async () => {
+  let onChange;
+  const watcher = new EventEmitter();
+  watcher.close = () => {};
+  const feed = createProjectChangeFeed("/fixture", {
+    debounceMs: 10,
+    heartbeatMs: 60000,
+    watchFactory: (_root, options, callback) => {
+      assert.equal(options.recursive, true);
+      onChange = callback;
+      return watcher;
+    },
+  });
+  const req = new EventEmitter();
+  req.method = "GET";
+  const chunks = [];
+  const res = {
+    writeHead(status, headers) {
+      assert.equal(status, 200);
+      assert.match(headers["content-type"], /text\/event-stream/);
+    },
+    write(chunk) { chunks.push(chunk); },
+    end() {},
+  };
+  feed.connect(req, res);
+  assert.match(chunks.join(""), /event: ready/);
+  assert.match(chunks.join(""), /"watching":true/);
+
+  onChange("change", ".git/index");
+  onChange("change", "docs/work/backlog.yml");
+  onChange("rename", "docs/work/backlog.yml");
+  await new Promise((resolve) => setTimeout(resolve, 30));
+
+  const events = chunks.join("");
+  assert.equal((events.match(/event: change/g) || []).length, 1);
+  assert.match(events, /"revision":1/);
+  assert.equal(shouldIgnoreWatchPath("node_modules/yaml/index.js"), true);
+  assert.equal(shouldIgnoreWatchPath("docs/work/active-release.md"), false);
+  req.emit("close");
+  feed.close();
+});
+
 test("serves the local read-only API with browser security headers", async (context) => {
   const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-server-state-"));
   process.env.WORK_MANAGEMENT_VIEWER_STATE_DIR = stateRoot;
@@ -69,6 +112,10 @@ test("serves the local read-only API with browser security headers", async (cont
   const api = await request(port, { path: "/api/data" });
   assert.equal(api.status, 200);
   assert.equal(JSON.parse(api.body).project.name, "Fixture Project");
+
+  const eventsHead = await request(port, { method: "HEAD", path: "/api/events" });
+  assert.equal(eventsHead.status, 200);
+  assert.match(eventsHead.headers["content-type"], /text\/event-stream/);
 
   const head = await request(port, { method: "HEAD" });
   assert.equal(head.status, 200);

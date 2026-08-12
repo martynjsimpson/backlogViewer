@@ -13,6 +13,8 @@ const state = {
   healthSeverities: new Set(["error", "warning", "recommendation"]),
   healthCodes: new Set(),
   hasAppliedDefaultStatuses: false,
+  openDetail: null,
+  livePaused: false,
 };
 
 const byId = (id) => document.getElementById(id);
@@ -22,6 +24,8 @@ const elements = {
   loadedAt: byId("loadedAt"),
   headerReleaseBadge: byId("headerReleaseBadge"),
   headerReleaseStatus: byId("headerReleaseStatus"),
+  liveStatusButton: byId("liveStatusButton"),
+  liveStatusText: byId("liveStatusText"),
   refreshButton: byId("refreshButton"),
   backToViewerLink: byId("backToViewerLink"),
   summaryGrid: byId("summaryGrid"),
@@ -100,6 +104,15 @@ const widgetElements = {
 };
 
 let lastFocusedElement = null;
+let currentDataSignature = "";
+let dataLoadPromise = null;
+let loadQueued = false;
+let queuedLoadSource = "live";
+let eventSource = null;
+let retryTimer = null;
+let retryDelay = 1000;
+let liveStatusTimer = null;
+let fallbackTimer = null;
 
 function normalise(value) {
   return String(value ?? "").toLowerCase();
@@ -110,7 +123,7 @@ function label(value) {
 }
 
 function humanKey(value) {
-  return String(value).replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return String(value).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function countLabel(count, singular) {
@@ -355,8 +368,18 @@ function renderDetailValue(value, key, item, kind) {
   return document.createTextNode(formatDetailValue(value));
 }
 
-function openDetailsModal(item, kind, trigger = document.activeElement) {
-  lastFocusedElement = trigger;
+function detailIdentity(item, kind) {
+  return kind === "health"
+    ? [item.code, item.entity_type, item.entity_id].join("\u001f")
+    : item.id;
+}
+
+function findEntityCard(kind, key) {
+  return [...document.querySelectorAll("[data-entity-kind][data-entity-key]")]
+    .find((element) => element.dataset.entityKind === kind && element.dataset.entityKey === key);
+}
+
+function renderDetailsModal(item, kind, focus = false) {
   elements.modalEyebrow.textContent = kind === "request" ? "Request" : kind === "work" ? "Work item" : "Health finding";
   elements.modalTitle.textContent = item.title || item.id || item.code || "Details";
   elements.modalTags.replaceChildren();
@@ -380,18 +403,48 @@ function openDetailsModal(item, kind, trigger = document.activeElement) {
   elements.modalBody.append(definition);
   elements.detailsModal.classList.remove("is-hidden");
   document.body.classList.add("modal-open");
-  elements.modalCloseButton.focus();
+  if (focus) elements.modalCloseButton.focus();
+}
+
+function openDetailsModal(item, kind, trigger = document.activeElement) {
+  lastFocusedElement = trigger;
+  state.openDetail = { kind, identity: detailIdentity(item, kind) };
+  renderDetailsModal(item, kind, true);
+}
+
+function reconcileOpenDetailsModal() {
+  if (!state.openDetail || elements.detailsModal.classList.contains("is-hidden")) return;
+  const collections = {
+    request: state.data.requests,
+    work: state.data.backlog,
+    health: state.data.health.findings,
+  };
+  const item = collections[state.openDetail.kind]
+    ?.find((entry) => detailIdentity(entry, state.openDetail.kind) === state.openDetail.identity);
+  if (item) {
+    renderDetailsModal(item, state.openDetail.kind);
+    return;
+  }
+  elements.modalTags.replaceChildren();
+  elements.modalBody.replaceChildren();
+  const message = document.createElement("p");
+  message.className = "empty-state";
+  message.textContent = "This record is no longer present in the latest project model.";
+  elements.modalBody.append(message);
 }
 
 function closeDetailsModal() {
   if (elements.detailsModal.classList.contains("is-hidden")) return;
   elements.detailsModal.classList.add("is-hidden");
   document.body.classList.remove("modal-open");
-  lastFocusedElement?.focus?.();
+  state.openDetail = null;
+  if (lastFocusedElement?.isConnected) lastFocusedElement.focus();
 }
 
 function makeClickableCard(card, item, kind) {
   card.classList.add("clickable-card");
+  card.dataset.entityKind = kind;
+  card.dataset.entityKey = detailIdentity(item, kind);
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", `Open ${kind} details for ${item.id || item.code}`);
@@ -749,6 +802,7 @@ function setMultiOptions(menu, selected, values) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.value = value;
+    input.dataset.filterMenu = menu.id;
     input.checked = selected.has(value);
     option.append(input, document.createTextNode(value));
     menu.append(option);
@@ -1071,19 +1125,162 @@ function render() {
   if (state.page === "viewer") setView(state.view, false);
 }
 
-async function loadData() {
-  elements.loadedAt.textContent = "Reading manifest and work files…";
-  const response = await fetch(`/api/data?now=${Date.now()}`, { cache: "no-store" });
-  const payload = await response.json();
-  if (!response.ok) throw new Error([payload.error, ...(payload.details || [])].join(" · "));
+function dataSignature(payload) {
+  return JSON.stringify({
+    project: payload.project,
+    requests: payload.requests,
+    backlog: payload.backlog,
+    active_release: payload.active_release,
+    health: payload.health,
+    widgets: payload.widgets,
+    summaries: payload.summaries,
+  });
+}
+
+function setLiveStatus(status, text, options = {}) {
+  clearTimeout(liveStatusTimer);
+  elements.liveStatusButton.className = `live-status state-${status}`;
+  elements.liveStatusText.textContent = text;
+  elements.liveStatusButton.title = options.title || "Click to pause live updates";
+  elements.liveStatusButton.setAttribute("aria-pressed", String(!state.livePaused));
+  if (options.returnToLive) {
+    liveStatusTimer = setTimeout(() => {
+      if (!state.livePaused && eventSource?.readyState === EventSource.OPEN) setLiveStatus("live", "Live");
+    }, options.returnToLive);
+  }
+}
+
+function formatUpdateTime(value) {
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(value);
+}
+
+function updateModel(payload, source) {
+  const signature = dataSignature(payload);
+  const changed = signature !== currentDataSignature;
+  currentDataSignature = signature;
   state.data = payload;
   elements.projectTitle.textContent = payload.project.name;
   elements.projectDescription.textContent = payload.project.description;
   document.title = `${payload.project.name} · Work Management Viewer`;
   const loaded = new Date(payload.generated_at);
   elements.loadedAt.textContent = `Loaded model v${payload.project.manifest.model_version} at ${loaded.toLocaleString()}`;
+  elements.loadedAt.classList.remove("load-error");
   elements.loadedAt.title = Object.values(payload.files).filter(Boolean).join("\n");
-  render();
+  if (changed) {
+    const scroll = { left: window.scrollX, top: window.scrollY };
+    const modalScroll = elements.detailsModal.querySelector(".modal-panel")?.scrollTop || 0;
+    const focusId = document.activeElement?.id;
+    const focusKey = document.activeElement?.dataset?.entityKey;
+    const focusKind = document.activeElement?.dataset?.entityKind;
+    const focusFilterMenu = document.activeElement?.dataset?.filterMenu;
+    const focusFilterValue = focusFilterMenu ? document.activeElement.value : null;
+    const triggerKey = lastFocusedElement?.dataset?.entityKey;
+    const triggerKind = lastFocusedElement?.dataset?.entityKind;
+    render();
+    if (triggerKey && triggerKind) {
+      lastFocusedElement = findEntityCard(triggerKind, triggerKey) || lastFocusedElement;
+    }
+    reconcileOpenDetailsModal();
+    const modalPanel = elements.detailsModal.querySelector(".modal-panel");
+    if (modalPanel) modalPanel.scrollTop = modalScroll;
+    window.scrollTo(scroll);
+    if (focusId && !state.openDetail) document.getElementById(focusId)?.focus();
+    else if (focusFilterMenu && focusFilterValue && !state.openDetail) {
+      document.querySelector(`#${CSS.escape(focusFilterMenu)} input[value="${CSS.escape(focusFilterValue)}"]`)?.focus();
+    } else if (focusKey && focusKind && !state.openDetail) {
+      findEntityCard(focusKind, focusKey)?.focus();
+    }
+  }
+  if (["live", "fallback"].includes(source) && changed) {
+    setLiveStatus("updated", `Updated ${formatUpdateTime(loaded)}`, { returnToLive: 2500 });
+  } else if (source === "live") setLiveStatus("live", "Live");
+  return changed;
+}
+
+async function loadData(source = "manual") {
+  if (dataLoadPromise) {
+    loadQueued = true;
+    queuedLoadSource = source === "manual" ? "manual" : queuedLoadSource;
+    return dataLoadPromise;
+  }
+  if (source === "initial") elements.loadedAt.textContent = "Reading manifest and work files…";
+  if (source === "manual") elements.refreshButton.disabled = true;
+  if (source === "live") setLiveStatus("updating", "Updating…");
+  dataLoadPromise = (async () => {
+    const response = await fetch(`/api/data?now=${Date.now()}`, { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error([payload.error, ...(payload.details || [])].join(" · "));
+    return updateModel(payload, source);
+  })();
+  try {
+    return await dataLoadPromise;
+  } catch (error) {
+    if (source === "initial") throw error;
+    setLiveStatus("unavailable", "Update failed", { title: `${error.message}. The last valid model is still displayed.` });
+    console.error(error);
+    return false;
+  } finally {
+    dataLoadPromise = null;
+    elements.refreshButton.disabled = false;
+    if (loadQueued) {
+      const nextSource = queuedLoadSource;
+      loadQueued = false;
+      queuedLoadSource = "live";
+      void loadData(nextSource);
+    }
+  }
+}
+
+function scheduleFallbackCheck() {
+  clearTimeout(fallbackTimer);
+  if (state.livePaused || document.hidden) return;
+  fallbackTimer = setTimeout(() => {
+    void loadData("fallback");
+    scheduleFallbackCheck();
+  }, 60000);
+}
+
+function disconnectLiveUpdates() {
+  clearTimeout(retryTimer);
+  clearTimeout(fallbackTimer);
+  eventSource?.close();
+  eventSource = null;
+}
+
+function connectLiveUpdates() {
+  if (state.livePaused || document.hidden || eventSource) return;
+  setLiveStatus("connecting", "Connecting…");
+  const source = new EventSource("/api/events");
+  eventSource = source;
+  source.addEventListener("ready", (event) => {
+    if (source !== eventSource) return;
+    retryDelay = 1000;
+    const ready = JSON.parse(event.data);
+    if (!elements.liveStatusButton.classList.contains("state-updating")
+      && !elements.liveStatusButton.classList.contains("state-updated")) {
+      setLiveStatus(ready.watching ? "live" : "unavailable", ready.watching ? "Live" : "Checking every minute", {
+        title: ready.watching ? "Live updates are connected. Click to pause." : "Filesystem watching is unavailable; periodic checks remain active.",
+      });
+    }
+    void loadData("fallback");
+    scheduleFallbackCheck();
+  });
+  source.addEventListener("change", () => {
+    if (!state.livePaused && !document.hidden) void loadData("live");
+  });
+  source.addEventListener("unavailable", () => {
+    setLiveStatus("unavailable", "Checking every minute", { title: "Filesystem watching stopped; periodic checks remain active." });
+    scheduleFallbackCheck();
+  });
+  source.onerror = () => {
+    if (source !== eventSource || state.livePaused) return;
+    source.close();
+    eventSource = null;
+    setLiveStatus("retrying", "Reconnecting…");
+    retryTimer = setTimeout(connectLiveUpdates, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 30000);
+    scheduleFallbackCheck();
+  };
 }
 
 function toggleFilter(filter, button) {
@@ -1113,11 +1310,23 @@ function handleMultiFilter(event, selected) {
 function showError(error) {
   elements.loadedAt.textContent = error.message;
   elements.loadedAt.classList.add("load-error");
+  setLiveStatus("unavailable", "Unable to load", { title: error.message });
   console.error(error);
 }
 
 loadUrlState();
-elements.refreshButton.addEventListener("click", () => loadData().catch(showError));
+elements.refreshButton.addEventListener("click", () => loadData("manual").catch(showError));
+elements.liveStatusButton.addEventListener("click", () => {
+  state.livePaused = !state.livePaused;
+  if (state.livePaused) {
+    disconnectLiveUpdates();
+    setLiveStatus("paused", "Paused", { title: "Live updates are paused. Click to resume." });
+  } else {
+    setLiveStatus("connecting", "Connecting…");
+    connectLiveUpdates();
+    void loadData("live");
+  }
+});
 elements.searchInput.addEventListener("input", (event) => { state.query = event.target.value; renderAndSync(); });
 elements.statusFilterButton.addEventListener("click", () => { closeFilters(elements.statusFilter); toggleFilter(elements.statusFilter, elements.statusFilterButton); });
 elements.typeFilterButton.addEventListener("click", () => { closeFilters(elements.typeFilter); toggleFilter(elements.typeFilter, elements.typeFilterButton); });
@@ -1162,7 +1371,15 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDetailsModal(); });
 window.addEventListener("popstate", () => { loadUrlState(); if (state.data) render(); });
+document.addEventListener("visibilitychange", () => {
+  if (state.livePaused) return;
+  if (document.hidden) disconnectLiveUpdates();
+  else {
+    connectLiveUpdates();
+    void loadData("live");
+  }
+});
 
 setPage("viewer");
 setView(state.view, false);
-loadData().catch(showError);
+loadData("initial").then(connectLiveUpdates).catch(showError);

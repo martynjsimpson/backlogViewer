@@ -5,6 +5,27 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-12
+
+### Added
+
+- Added live project updates using a debounced filesystem watcher and same-origin Server-Sent
+  Events, with automatic reconnection and periodic fallback checks.
+- Added a compact header control showing live, updating, paused, reconnecting, fallback, and failure
+  states; clicking it pauses or resumes automatic updates.
+- Added coverage for debounced change notifications, ignored generated paths, the events endpoint,
+  and unchanged metric-history snapshots.
+
+### Changed
+
+- Preserve the active view, filters, search, scroll position, keyboard focus, and open detail modal
+  while applying live model changes without reloading the page.
+- Keep the last valid model visible during transient parse failures, coalesce overlapping refreshes,
+  skip unchanged redraws, and recover automatically after the next valid write.
+- Reload the manifest for each model refresh so compatible configuration changes are reflected
+  without restarting the viewer.
+- Avoid rewriting metric-history files when the calculated values have not changed.
+
 ## [0.4.0] - 2026-08-12
 
 ### Added

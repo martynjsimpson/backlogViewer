@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require("fs/promises");
+const { watch } = require("fs");
 const http = require("http");
 const path = require("path");
 const { ConfigurationError, loadProjectConfiguration } = require("./src/config");
@@ -25,6 +26,7 @@ const securityHeaders = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
 };
+const ignoredWatchSegments = new Set([".git", "node_modules", "workManagementClaudePlugin"]);
 
 function getArg(argv, name) {
   const index = argv.indexOf(name);
@@ -63,6 +65,104 @@ function isAllowedHost(hostHeader) {
   } catch {
     return false;
   }
+}
+
+function shouldIgnoreWatchPath(filename) {
+  if (!filename) return false;
+  return String(filename)
+    .split(/[\\/]+/)
+    .some((segment) => ignoredWatchSegments.has(segment));
+}
+
+function createProjectChangeFeed(root, options = {}) {
+  const subscribers = new Set();
+  const watchFactory = options.watchFactory || watch;
+  const debounceMs = options.debounceMs ?? 450;
+  const heartbeatMs = options.heartbeatMs ?? 15000;
+  let debounceTimer = null;
+  let revision = 0;
+  let watcher = null;
+  let watching = false;
+
+  function writeEvent(res, event, payload) {
+    if (event === "change") res.write(`id: ${payload.revision}\n`);
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  }
+
+  function broadcast(event, payload) {
+    for (const res of subscribers) {
+      try {
+        writeEvent(res, event, payload);
+      } catch {
+        subscribers.delete(res);
+      }
+    }
+  }
+
+  function watcherUnavailable() {
+    if (!watching && !watcher) return;
+    watching = false;
+    watcher?.close();
+    watcher = null;
+    broadcast("unavailable", { watching: false });
+  }
+
+  try {
+    watcher = watchFactory(root, { recursive: true, persistent: false }, (_eventType, filename) => {
+      if (shouldIgnoreWatchPath(filename)) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        revision += 1;
+        broadcast("change", { revision, changed_at: new Date().toISOString() });
+      }, debounceMs);
+      debounceTimer.unref?.();
+    });
+    watching = true;
+    watcher.on?.("error", watcherUnavailable);
+  } catch {
+    watcherUnavailable();
+  }
+
+  const heartbeat = setInterval(() => {
+    for (const res of subscribers) {
+      try {
+        res.write(": keep-alive\n\n");
+      } catch {
+        subscribers.delete(res);
+      }
+    }
+  }, heartbeatMs);
+  heartbeat.unref?.();
+
+  function connect(req, res) {
+    const headers = {
+      ...securityHeaders,
+      "cache-control": "no-cache, no-store",
+      "content-type": "text/event-stream; charset=utf-8",
+      connection: "keep-alive",
+      "x-accel-buffering": "no",
+    };
+    res.writeHead(200, headers);
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    subscribers.add(res);
+    res.write("retry: 2000\n");
+    writeEvent(res, "ready", { revision, watching });
+    req.once("close", () => subscribers.delete(res));
+  }
+
+  function close() {
+    clearTimeout(debounceTimer);
+    clearInterval(heartbeat);
+    watcher?.close();
+    for (const res of subscribers) res.end();
+    subscribers.clear();
+  }
+
+  return { close, connect, get revision() { return revision; }, get watching() { return watching; } };
 }
 
 async function readOptional(file) {
@@ -133,8 +233,11 @@ async function serveStatic(res, pathname) {
   }
 }
 
-function createServer(config) {
-  return http.createServer(async (req, res) => {
+function createServer(config, options = {}) {
+  const projectInput = options.projectInput || config.manifestFile;
+  const dataLoader = options.dataLoader || (async () => getData(await loadProjectConfiguration(projectInput)));
+  const changeFeed = options.changeFeed || createProjectChangeFeed(config.root, options.watchOptions);
+  const server = http.createServer(async (req, res) => {
     if (!isAllowedHost(req.headers.host)) {
       send(res, 421, "Misdirected request");
       return;
@@ -150,9 +253,13 @@ function createServer(config) {
       send(res, 400, "Invalid request URL");
       return;
     }
+    if (pathname === "/api/events") {
+      changeFeed.connect(req, res);
+      return;
+    }
     if (pathname === "/api/data") {
       try {
-        send(res, 200, JSON.stringify(await getData(config)), "application/json; charset=utf-8");
+        send(res, 200, JSON.stringify(await dataLoader()), "application/json; charset=utf-8");
       } catch (error) {
         send(res, 500, JSON.stringify({ error: error.message, code: error.code || "DATA_ERROR", details: error.details || [] }), "application/json; charset=utf-8");
       }
@@ -160,6 +267,12 @@ function createServer(config) {
     }
     await serveStatic(res, pathname);
   });
+  const closeServer = server.close.bind(server);
+  server.close = (callback) => {
+    changeFeed.close();
+    return closeServer(callback);
+  };
+  return server;
 }
 
 async function main(argv = process.argv.slice(2)) {
@@ -171,7 +284,7 @@ async function main(argv = process.argv.slice(2)) {
   const port = Number(getArg(argv, "--port") || process.env.PORT || 5177);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigurationError(`Invalid port: ${port}`, "INVALID_PORT");
   const config = await loadProjectConfiguration(projectInput);
-  const server = createServer(config);
+  const server = createServer(config, { projectInput });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => {
@@ -197,4 +310,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, getArg, getData, isAllowedHost, main, usage };
+module.exports = { createProjectChangeFeed, createServer, getArg, getData, isAllowedHost, main, shouldIgnoreWatchPath, usage };

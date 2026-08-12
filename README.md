@@ -14,8 +14,8 @@ this viewer can inspect any compatible project without copying application code 
 ![Work Management Viewer showing project metrics, filters, and status charts](docs/images/backlog-viewer-overview.jpg)
 
 The viewer never modifies project planning files. It reads `project.yml`, derives its configuration
-from the manifest, and refreshes directly from disk. Health findings are diagnostic; repairs and
-migrations remain the plugin's responsibility.
+from the manifest, and follows changes directly from disk. Health findings are diagnostic; repairs
+and migrations remain the plugin's responsibility.
 
 ## Requirements
 
@@ -60,6 +60,23 @@ Filter and navigation state is encoded in the URL, so filtered views can be book
 history behaves normally. Search accepts text and qualified terms such as `status:blocked`,
 `type:spike`, `agent:frontend-developer`, and `capability:imports`.
 
+## Live updates
+
+The viewer watches the selected project and updates automatically as agents change its files. A
+small header indicator shows whether updates are live, being applied, paused, reconnecting, or
+using periodic fallback checks. Click the indicator to pause or resume live updates; the Refresh
+button remains available as a manual fallback.
+
+Updates replace only the in-memory model, not the page. The current tab, URL-backed filters, search,
+scroll position, keyboard focus, and open details modal are retained. Rapid file events are grouped
+into one refresh, overlapping refreshes are coalesced, and unchanged models are not redrawn. If an
+agent is midway through writing invalid YAML or Markdown, the last valid model remains visible and
+the viewer recovers on the next valid change.
+
+Filesystem watching is supplemented by a low-frequency check and reconnects automatically after a
+server restart. Hidden browser tabs disconnect to avoid unnecessary work and check immediately when
+they become visible again.
+
 ## Manifest discovery
 
 Without `--project`, discovery starts at the current working directory and walks upward. At each
@@ -98,7 +115,8 @@ This is a single-user local development tool, not a hosted service:
 
 - The HTTP server binds only to `127.0.0.1` and rejects non-local Host headers.
 - Its HTTP surface accepts only `GET` and `HEAD`, and it applies a restrictive browser security
-  policy. The only disk write is the metric-history file described above.
+  policy. The live-update stream is same-origin and read-only. The only disk write is the
+  metric-history file described above.
 - Project content is inserted as text rather than interpreted as HTML, and Markdown support is a
   deliberately small safe subset.
 - The application makes no outbound network requests at runtime and has no telemetry.
@@ -122,8 +140,8 @@ node server.js --project test/fixtures/custom-project/project.yml --port 5178
 ```
 
 `npm run check` validates the server and browser scripts, then runs the `node:test` suite. Tests
-cover manifest discovery and compatibility, parsers, bidirectional links, Health guidance, local
-HTTP protections, and per-project metric-history isolation.
+cover manifest discovery and compatibility, parsers, bidirectional links, Health guidance, live
+change events, local HTTP protections, and per-project metric-history isolation.
 
 ## Compatibility contract
 

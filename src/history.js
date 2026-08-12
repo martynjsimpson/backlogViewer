@@ -53,15 +53,17 @@ async function updateWidgetHistory(projectRoot, widgets) {
     snapshots.push({ at: new Date().toISOString(), values: widgets });
   }
   const next = { projectRoot: resolvedRoot, snapshots: snapshots.slice(-180) };
-  const stateDir = path.dirname(stateFile);
-  const temporaryFile = `${stateFile}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
-  await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
-  try {
-    await fs.writeFile(temporaryFile, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    await fs.rename(temporaryFile, stateFile);
-  } catch (error) {
-    await fs.rm(temporaryFile, { force: true }).catch(() => {});
-    throw error;
+  if (JSON.stringify(existing) !== JSON.stringify(next)) {
+    const stateDir = path.dirname(stateFile);
+    const temporaryFile = `${stateFile}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+    await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
+    try {
+      await fs.writeFile(temporaryFile, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+      await fs.rename(temporaryFile, stateFile);
+    } catch (error) {
+      await fs.rm(temporaryFile, { force: true }).catch(() => {});
+      throw error;
+    }
   }
   return {
     state_file: stateFile,
