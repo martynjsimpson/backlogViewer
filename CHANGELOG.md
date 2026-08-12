@@ -5,6 +5,31 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-12
+
+### Added
+
+- Added a current application screenshot to the README.
+- Added a centered, status-coloured Active Release badge to the header with direct navigation to
+  the release view.
+- Added pull-request and main-branch CI plus Dependabot configuration for npm and GitHub Actions.
+
+### Changed
+
+- Clarified setup, architecture, metric-history isolation, and the local-only security model in the
+  README.
+- Made metric-history writes atomic and private to the current user, recover safely from corrupt
+  derived state, and reject history recorded for a different project root.
+- Added package metadata and a single `npm run check` command for local and CI verification.
+
+### Security
+
+- Reject non-local Host headers to protect the loopback service from DNS rebinding.
+- Restrict HTTP methods to `GET` and `HEAD` and add Content Security Policy, clickjacking,
+  MIME-sniffing, referrer, permissions, and cross-origin resource protections.
+- Run release tests with read-only GitHub permissions, pin Actions to immutable revisions, disable
+  dependency lifecycle scripts in CI, and grant write permission only to the release job.
+
 ## [0.3.0] - 2026-08-11
 
 ### Changed

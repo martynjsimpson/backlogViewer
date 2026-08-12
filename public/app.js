@@ -20,6 +20,8 @@ const elements = {
   projectTitle: byId("projectTitle"),
   projectDescription: byId("projectDescription"),
   loadedAt: byId("loadedAt"),
+  headerReleaseBadge: byId("headerReleaseBadge"),
+  headerReleaseStatus: byId("headerReleaseStatus"),
   refreshButton: byId("refreshButton"),
   backToViewerLink: byId("backToViewerLink"),
   summaryGrid: byId("summaryGrid"),
@@ -800,8 +802,15 @@ function renderActiveFilters() {
 
 function renderRelease() {
   const release = state.data.active_release;
-  elements.releaseStatusBadge.className = `tag status-${normalise(release.status).replace(/[^a-z0-9]+/g, "-")}`;
-  elements.releaseStatusBadge.textContent = release.status || "none";
+  const status = release.status || "none";
+  const statusClass = `status-${normalise(status).replace(/[^a-z0-9]+/g, "-")}`;
+  elements.releaseStatusBadge.className = `tag ${statusClass}`;
+  elements.releaseStatusBadge.textContent = status;
+  elements.headerReleaseBadge.className = `tag header-release-badge ${statusClass}`;
+  elements.headerReleaseBadge.disabled = false;
+  elements.headerReleaseBadge.setAttribute("aria-label", `Active release status: ${humanKey(status)}. Open Active Release.`);
+  elements.headerReleaseBadge.title = [release.version, `${release.work_items.length} selected work item${release.work_items.length === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+  elements.headerReleaseStatus.textContent = humanKey(status);
   elements.releaseOverview.replaceChildren();
   for (const [title, value] of [["Version", release.version || "TBD"], ["Branch", release.branch || "Not assigned"], ["Selected items", release.work_items.length]]) {
     const card = document.createElement("article");
@@ -1141,6 +1150,7 @@ elements.backToViewerLink.addEventListener("click", () => {
 byId("unlinkedRequestsButton").addEventListener("click", () => applyFilters({ view: "requests", unlinkedOnly: true }));
 byId("inboxRequestsButton").addEventListener("click", () => applyFilters({ view: "requests", statuses: ["inbox"] }));
 byId("activeReleaseRequestsButton").addEventListener("click", () => setView("release"));
+elements.headerReleaseBadge.addEventListener("click", () => { setView("release"); render(); });
 byId("openRequestsButton").addEventListener("click", () => applyFilters({ view: "requests", statuses: ["needs-refinement", "refined", "partially-done", "blocked"] }));
 byId("healthErrorsButton").addEventListener("click", () => { state.healthSeverities = new Set(["error"]); setView("health"); render(); });
 byId("healthWarningsButton").addEventListener("click", () => { state.healthSeverities = new Set(["warning"]); setView("health"); render(); });

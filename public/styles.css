@@ -85,14 +85,18 @@ input {
   position: sticky;
   top: 0;
   z-index: 10;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--line);
   background: var(--header-bg);
   backdrop-filter: blur(8px);
+}
+
+.header-project {
+  min-width: 0;
 }
 
 .app-header h1 {
@@ -110,7 +114,61 @@ input {
 .header-actions {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 14px;
+}
+
+.tag.header-release-badge[class*="status-"] {
+  display: inline-grid;
+  min-width: 148px;
+  min-height: 46px;
+  justify-items: center;
+  align-content: center;
+  gap: 1px;
+  border-color: color-mix(in srgb, var(--accent, var(--steel)) 48%, var(--line));
+  background: color-mix(in srgb, var(--accent, var(--steel)) 13%, var(--surface));
+  padding: 5px 16px;
+  color: var(--accent, var(--steel));
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.header-release-badge::before {
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.tag.header-release-badge[class*="status-"]:hover {
+  border-color: var(--accent, var(--blue));
+  background: color-mix(in srgb, var(--accent, var(--steel)) 19%, var(--surface));
+}
+
+.header-release-badge:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.header-release-label {
+  grid-column: 1 / 3;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.header-release-badge strong {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 12px;
+  line-height: 1.3;
 }
 
 main {
@@ -679,6 +737,10 @@ button.bar-row:hover {
   --accent: var(--violet);
 }
 
+:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-in-progress {
+  --accent: var(--blue);
+}
+
 :is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-done {
   --accent: var(--green);
 }
@@ -697,10 +759,17 @@ button.bar-row:hover {
 }
 
 :is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-proposed,
-:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-approved,
-:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-testing,
-:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-ready-for-release {
+:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-approved {
   --accent: var(--violet);
+}
+
+:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-testing {
+  --accent: var(--amber);
+}
+
+:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-ready-for-release,
+:is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-released {
+  --accent: var(--green);
 }
 
 :is(.tag, .bar-fill, .stacked-segment, .stacked-chip).status-cancelled {
@@ -1008,8 +1077,22 @@ button.link-item-row:hover {
 @media (max-width: 680px) {
   .app-header {
     position: static;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: flex-start;
     padding: 14px;
+  }
+
+  .header-project {
+    grid-column: 1 / -1;
+  }
+
+  .header-release-badge {
+    grid-column: 2;
+    justify-self: center;
+  }
+
+  .header-actions {
+    grid-column: 3;
   }
 
   main {
@@ -1399,5 +1482,18 @@ button.link-item-row:hover {
 
   .health-result-count {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-release-badge {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .header-actions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: center;
   }
 }

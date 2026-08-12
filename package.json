@@ -1,14 +1,29 @@
 {
   "name": "work-management-viewer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local dashboard and conformance checker for the manifest-driven work-management model.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martynjsimpson/backlogViewer.git"
+  },
+  "homepage": "https://github.com/martynjsimpson/backlogViewer#readme",
+  "bugs": {
+    "url": "https://github.com/martynjsimpson/backlogViewer/issues"
+  },
+  "keywords": [
+    "backlog",
+    "dashboard",
+    "project-management",
+    "sdlc"
+  ],
   "type": "commonjs",
   "bin": {
     "work-management-viewer": "server.js"
   },
   "scripts": {
     "start": "node server.js",
+    "check": "node --check server.js && node --check public/app.js && node --test",
     "test": "node --test",
     "test:watch": "node --test --watch"
   },
@@ -19,6 +34,7 @@
     "server.js",
     "src",
     "public",
+    "docs/images",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

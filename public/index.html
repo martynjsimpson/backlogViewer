@@ -3,18 +3,23 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A local dashboard and conformance checker for manifest-driven work management.">
     <title>Work Management Viewer</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header class="app-header">
-      <div>
+      <div class="header-project">
           <span class="header-eyebrow">Work Management Viewer</span>
           <h1 id="projectTitle">Loading project…</h1>
           <p id="projectDescription" class="project-description"></p>
           <p id="loadedAt">Loading local planning files...</p>
       </div>
+      <button id="headerReleaseBadge" class="tag header-release-badge status-none" type="button" disabled>
+        <span class="header-release-label">Active release</span>
+        <strong id="headerReleaseStatus" aria-live="polite">Loading…</strong>
+      </button>
       <div class="header-actions">
         <button id="refreshButton" type="button">Refresh</button>
       </div>

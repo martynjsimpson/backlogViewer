@@ -1,46 +1,64 @@
 # Work Management Viewer
 
-A local dashboard and conformance checker for projects using the manifest-driven
-`Request → Work item → Active release → Done` model from the
+[![CI](https://github.com/martynjsimpson/backlogViewer/actions/workflows/ci.yml/badge.svg)](https://github.com/martynjsimpson/backlogViewer/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/martynjsimpson/backlogViewer)](https://github.com/martynjsimpson/backlogViewer/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Work Management Viewer (`backlogViewer`) is a local dashboard and conformance checker for the
+manifest-driven `Request → Work item → Active release → Done` model from the
 [Work Management Claude Plugin](https://github.com/martynjsimpson/workManagementClaudePlugin).
 
-The companion plugin creates and manages the work files in each project; this viewer reads and
-visualizes those files from one central installation.
+The companion plugin creates and manages each project's work files. One central installation of
+this viewer can inspect any compatible project without copying application code into that project.
 
-The viewer is read-only with respect to project planning files. It reads `project.yml`, derives
-all paths, identifiers, taxonomies, and agents from the manifest, and refreshes its data directly
-from disk. Health findings are diagnostic; the viewer never repairs or migrates work files.
+![Work Management Viewer showing project metrics, filters, and status charts](docs/images/backlog-viewer-overview.jpg)
+
+The viewer never modifies project planning files. It reads `project.yml`, derives its configuration
+from the manifest, and refreshes directly from disk. Health findings are diagnostic; repairs and
+migrations remain the plugin's responsibility.
 
 ## Requirements
 
 - Node.js 20 or newer
 - A work-management manifest using `model_version: 3`
 
-## Run locally
-
-From this repository:
+## Quick start
 
 ```sh
-npm install
+git clone https://github.com/martynjsimpson/backlogViewer.git
+cd backlogViewer
+npm ci
 npm start -- --project /path/to/project
 ```
 
-Then open `http://127.0.0.1:5177`.
+Open `http://127.0.0.1:5177`.
 
-Use another port when needed:
+Use a different port when needed:
 
 ```sh
 npm start -- --project /path/to/project --port 5178
 ```
 
-Once the package is published, the equivalent command is:
+`--project` accepts a project directory or the exact path to `project.yml`. Relative paths resolve
+from the caller's current working directory. If the package is published to npm, the equivalent
+command will be:
 
 ```sh
 npx work-management-viewer --project /path/to/project
 ```
 
-`--project` accepts either a project directory or the exact path to `project.yml`. Relative paths
-are resolved from the caller's current working directory, not from the installed package.
+## What it shows
+
+- **Requests** — human-facing asks with status/type filtering, qualified search, and delivery links.
+- **Work items** — YAML work records, including blockers, dependencies, agents, and completion.
+- **Links** — request-to-work relationships, including missing and intentionally empty links.
+- **Active release** — scope, status, decisions, agents, blockers, and verification information.
+- **Health** — actionable errors, warnings, and recommendations for model conformance.
+- **Charts** — request, work-item, capability, priority, and delivered-release breakdowns.
+
+Filter and navigation state is encoded in the URL, so filtered views can be bookmarked and browser
+history behaves normally. Search accepts text and qualified terms such as `status:blocked`,
+`type:spike`, `agent:frontend-developer`, and `capability:imports`.
 
 ## Manifest discovery
 
@@ -58,31 +76,11 @@ and the agent roster all come from the manifest.
 The viewer supports manifest schema version 3. Older, newer, missing, or shape-incompatible
 manifests produce a clear startup error. They are never auto-migrated.
 
-## Views
-
-- **Requests** — human-facing asks with status/type filtering, qualified search, and delivery links.
-- **Work items** — parsed YAML work-item records, including blocked state and spike completion.
-- **Links** — request context plus linked work-item titles, statuses, types, and capabilities, with
-  distinct states for valid links, missing references, unlinked requests, and intentional
-  `Work items: none`.
-- **Active release** — goal, version, branch, release status, selected items joined to live work-item
-  state, decisions, agents, blockers, and verification information. Release prose renders common
-  Markdown emphasis, inline code, and lists; recognised Request and Work item IDs link to their
-  records.
-- **Health** — structure, vocabulary, paired fields, completion values, referential integrity,
-  spike documents, ownership, VCS coherence, and pruning hygiene. Findings are classified as
-  errors, warnings, or recommendations; each explains what it means, shows the observed value, and
-  gives a concrete recommended action. Severity and multi-select Code filters help isolate a class
-  of finding while you work through it.
-
-Filter and navigation state is encoded in the URL, so a filtered view can be bookmarked and the
-browser back button restores the previous state. Search accepts ordinary text and qualified terms
-such as `status:blocked`, `type:spike`, `agent:frontend-developer`, and `capability:imports`.
-
 ## Metric history
 
 Metric snapshots are stored outside both the installed package and the project. The location is
-platform-specific and keyed by a hash of the canonical project root:
+platform-specific and each canonical project root hashes to a separate state file. One project's
+history therefore cannot affect another's, even when their names match:
 
 - macOS: `~/Library/Application Support/work-management-viewer/`
 - Linux: `$XDG_STATE_HOME/work-management-viewer/` or `~/.local/state/work-management-viewer/`
@@ -91,16 +89,41 @@ platform-specific and keyed by a hash of the canonical project root:
 Set `WORK_MANAGEMENT_VIEWER_STATE_DIR` to override the location, which is useful for tests and
 temporary environments.
 
+Only project planning files are read-only: the viewer writes this small local history file so it
+can show changes since the previous snapshot. It retains at most 180 changed snapshots per project.
+
+## Security model
+
+This is a single-user local development tool, not a hosted service:
+
+- The HTTP server binds only to `127.0.0.1` and rejects non-local Host headers.
+- Its HTTP surface accepts only `GET` and `HEAD`, and it applies a restrictive browser security
+  policy. The only disk write is the metric-history file described above.
+- Project content is inserted as text rather than interpreted as HTML, and Markdown support is a
+  deliberately small safe subset.
+- The application makes no outbound network requests at runtime and has no telemetry.
+
+There is intentionally no authentication. Do not expose the server through a reverse proxy, port
+forward, container-published interface, or public network. Only select projects you trust: the
+manifest controls which local work files the viewer reads.
+
+## Architecture
+
+The application deliberately stays small: a Node.js HTTP server and parser layer feed a vanilla
+HTML/CSS/JavaScript client. There is no build step, database, frontend framework, or runtime
+dependency beyond the YAML parser.
+
 ## Development
 
 ```sh
-npm test
+npm ci
+npm run check
 node server.js --project test/fixtures/custom-project/project.yml --port 5178
 ```
 
-The test suite uses `node:test` and covers manifest discovery and compatibility, custom prefixes,
-Markdown continuation rules, real YAML block scalars, multi-value completion metadata, spike
-markers, active-release parsing, bidirectional links, and health validation.
+`npm run check` validates the server and browser scripts, then runs the `node:test` suite. Tests
+cover manifest discovery and compatibility, parsers, bidirectional links, Health guidance, local
+HTTP protections, and per-project metric-history isolation.
 
 ## Compatibility contract
 

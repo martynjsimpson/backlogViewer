@@ -9,6 +9,7 @@ const { buildHealth, calculateWidgets, createSummaries, linkModel } = require(".
 const { parseActiveRelease, parseBacklog, parseRequests } = require("./src/parsers");
 
 const publicDir = path.join(__dirname, "public");
+const allowedHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -16,19 +17,52 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
 };
+const securityHeaders = {
+  "content-security-policy": "default-src 'self'; base-uri 'none'; connect-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": "camera=(), geolocation=(), microphone=()",
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+};
 
 function getArg(argv, name) {
   const index = argv.indexOf(name);
-  return index === -1 ? null : argv[index + 1];
+  if (index === -1) return null;
+  const value = argv[index + 1];
+  if (!value || value.startsWith("-")) {
+    throw new ConfigurationError(`Missing value for ${name}`, "INVALID_ARGUMENT");
+  }
+  return value;
 }
 
 function usage() {
   return `work-management-viewer [options]\n\nOptions:\n  --project <path>  Project directory or project.yml (default: current directory)\n  --port <number>   Local port (default: 5177)\n  --help            Show this help\n`;
 }
 
-function send(res, statusCode, body, contentType = "text/plain; charset=utf-8") {
-  res.writeHead(statusCode, { "content-type": contentType, "cache-control": "no-store" });
-  res.end(body);
+function send(res, statusCode, body, contentType = "text/plain; charset=utf-8", headers = {}) {
+  res.writeHead(statusCode, {
+    ...securityHeaders,
+    "cache-control": "no-store",
+    "content-type": contentType,
+    ...headers,
+  });
+  res.end(res.req?.method === "HEAD" ? undefined : body);
+}
+
+function isAllowedHost(hostHeader) {
+  if (!hostHeader) return false;
+  try {
+    const address = new URL(`http://${hostHeader}`);
+    return !address.username
+      && !address.password
+      && address.pathname === "/"
+      && !address.search
+      && !address.hash
+      && allowedHostnames.has(address.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 async function readOptional(file) {
@@ -95,13 +129,27 @@ async function serveStatic(res, pathname) {
   try {
     send(res, 200, await fs.readFile(filePath), mimeTypes[path.extname(filePath)] || "application/octet-stream");
   } catch (error) {
-    send(res, error.code === "ENOENT" ? 404 : 500, error.code === "ENOENT" ? "Not found" : error.message);
+    send(res, error.code === "ENOENT" ? 404 : 500, error.code === "ENOENT" ? "Not found" : "Unable to read asset");
   }
 }
 
 function createServer(config) {
   return http.createServer(async (req, res) => {
-    const { pathname } = new URL(req.url, "http://127.0.0.1");
+    if (!isAllowedHost(req.headers.host)) {
+      send(res, 421, "Misdirected request");
+      return;
+    }
+    if (!["GET", "HEAD"].includes(req.method)) {
+      send(res, 405, "Method not allowed", "text/plain; charset=utf-8", { allow: "GET, HEAD" });
+      return;
+    }
+    let pathname;
+    try {
+      ({ pathname } = new URL(req.url, "http://127.0.0.1"));
+    } catch {
+      send(res, 400, "Invalid request URL");
+      return;
+    }
     if (pathname === "/api/data") {
       try {
         send(res, 200, JSON.stringify(await getData(config)), "application/json; charset=utf-8");
@@ -149,4 +197,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createServer, getArg, getData, main, usage };
+module.exports = { createServer, getArg, getData, isAllowedHost, main, usage };

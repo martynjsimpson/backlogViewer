@@ -22,21 +22,47 @@ function valuesEqual(left, right) {
 }
 
 async function updateWidgetHistory(projectRoot, widgets) {
+  const resolvedRoot = path.resolve(projectRoot);
   const stateFile = stateFileForProject(projectRoot);
   let existing = { snapshots: [] };
   try {
     existing = JSON.parse(await fs.readFile(stateFile, "utf8"));
   } catch (error) {
-    if (error.code !== "ENOENT") throw error;
+    if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
   }
-  const snapshots = Array.isArray(existing.snapshots) ? existing.snapshots : [];
+  if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+    existing = { snapshots: [] };
+  }
+  if (existing.projectRoot && (
+    typeof existing.projectRoot !== "string"
+    || path.resolve(existing.projectRoot) !== resolvedRoot
+  )) {
+    existing = { snapshots: [] };
+  }
+  const snapshots = Array.isArray(existing.snapshots)
+    ? existing.snapshots.filter((snapshot) => (
+      snapshot
+      && typeof snapshot === "object"
+      && snapshot.values
+      && typeof snapshot.values === "object"
+      && !Array.isArray(snapshot.values)
+    ))
+    : [];
   const previous = snapshots.at(-1) || null;
   if (!previous || !valuesEqual(previous.values || {}, widgets)) {
     snapshots.push({ at: new Date().toISOString(), values: widgets });
   }
-  const next = { projectRoot: path.resolve(projectRoot), snapshots: snapshots.slice(-180) };
-  await fs.mkdir(path.dirname(stateFile), { recursive: true });
-  await fs.writeFile(stateFile, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  const next = { projectRoot: resolvedRoot, snapshots: snapshots.slice(-180) };
+  const stateDir = path.dirname(stateFile);
+  const temporaryFile = `${stateFile}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
+  await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
+  try {
+    await fs.writeFile(temporaryFile, `${JSON.stringify(next, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await fs.rename(temporaryFile, stateFile);
+  } catch (error) {
+    await fs.rm(temporaryFile, { force: true }).catch(() => {});
+    throw error;
+  }
   return {
     state_file: stateFile,
     snapshots: next.snapshots,
