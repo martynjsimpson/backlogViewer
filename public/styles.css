@@ -272,6 +272,39 @@ button:hover {
   gap: 12px;
 }
 
+.dashboard-view {
+  display: grid;
+}
+
+.view-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.view-metric {
+  min-height: 88px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  padding: 12px 14px;
+}
+
+.view-metric strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.view-metric > span:last-child {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .metric,
 .panel,
 .data-view {
@@ -1190,6 +1223,12 @@ button.link-item-row:hover {
   .item-topline,
   .link-item-row {
     grid-template-columns: 1fr;
+  }
+
+  .view-summary-grid {
+    grid-template-columns: repeat(3, minmax(124px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 
   .link-notice-no-id .link-notice-copy {

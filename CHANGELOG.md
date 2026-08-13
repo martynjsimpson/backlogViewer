@@ -5,8 +5,18 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-13
+
+### Added
+
+- Added a default Dashboard tab for project-wide metrics and charts.
+- Added three filter-aware summary metrics to each of the Requests, Work Items, and Links views.
+
 ### Changed
 
+- Moved overview widgets and charts out of the record views and made their Dashboard values
+  independent of retained record filters.
+- Kept chart drill-downs connected to the relevant filtered Requests or Work Items view.
 - Condensed the header by removing the redundant Refresh button and moving the model timestamp and
   live-update control into its right-hand position.
 

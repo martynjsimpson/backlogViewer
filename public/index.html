@@ -33,15 +33,17 @@
 
     <main>
       <nav class="primary-tabs" aria-label="Viewer sections">
-        <button class="primary-tab is-active" data-view="requests" type="button">Requests</button>
+        <button class="primary-tab is-active" data-view="dashboard" type="button">Dashboard</button>
+        <button class="primary-tab" data-view="requests" type="button">Requests</button>
         <button class="primary-tab" data-view="backlog" type="button">Work items</button>
         <button class="primary-tab" data-view="links" type="button">Links</button>
         <button class="primary-tab" data-view="release" type="button">Active release</button>
         <button class="primary-tab" data-view="health" type="button">Health <span id="healthNavCount" class="nav-count">0</span></button>
       </nav>
 
-      <section id="summaryGrid" class="summary-grid" aria-label="Project totals">
-        <article class="metric">
+      <section id="dashboardView" class="dashboard-view" aria-label="Project dashboard">
+        <section id="summaryGrid" class="summary-grid" aria-label="Project totals">
+          <article class="metric">
           <span class="metric-label">Inbox Requests</span>
           <div class="metric-value-line">
             <button id="inboxRequestsButton" class="metric-link" type="button">
@@ -50,8 +52,8 @@
             <span id="inboxRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
           <span>awaiting review</span>
-        </article>
-        <article class="metric">
+          </article>
+          <article class="metric">
           <span class="metric-label">In Active Release</span>
           <div class="metric-value-line">
             <button id="activeReleaseRequestsButton" class="metric-link" type="button">
@@ -60,8 +62,8 @@
             <span id="activeReleaseRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
           <span>selected for delivery</span>
-        </article>
-        <article class="metric">
+          </article>
+          <article class="metric">
           <span class="metric-label">Open Requests</span>
           <div class="metric-value-line">
             <button id="openRequestsButton" class="metric-link" type="button">
@@ -69,8 +71,8 @@
             </button>
             <span id="openRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
-        </article>
-        <article class="metric">
+          </article>
+          <article class="metric">
           <span class="metric-label">Unlinked Requests</span>
           <div class="metric-value-line">
             <button id="unlinkedRequestsButton" class="metric-link" type="button">
@@ -79,40 +81,66 @@
             <span id="unlinkedRequestsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
           <span>no work item</span>
-        </article>
-        <article class="metric">
+          </article>
+          <article class="metric">
           <span class="metric-label">Work Items</span>
           <div class="metric-value-line">
             <strong id="backlogTotal">0</strong>
             <span id="backlogItemsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
           <span id="backlogActive">excluding done/duplicate</span>
-        </article>
-        <article class="metric">
+          </article>
+          <article class="metric">
           <span class="metric-label">Completed Work Items</span>
           <div class="metric-value-line">
             <strong id="backlogComplete">0</strong>
             <span id="backlogCompleteTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
           <span>status done</span>
-        </article>
-        <article class="metric health-metric">
+          </article>
+          <article class="metric health-metric">
           <span class="metric-label">Health Errors</span>
           <div class="metric-value-line">
             <button id="healthErrorsButton" class="metric-link" type="button"><strong id="healthErrors">0</strong></button>
           </div>
           <span>must be resolved</span>
-        </article>
-        <article class="metric health-metric">
+          </article>
+          <article class="metric health-metric">
           <span class="metric-label">Health Warnings</span>
           <div class="metric-value-line">
             <button id="healthWarningsButton" class="metric-link" type="button"><strong id="healthWarnings">0</strong></button>
           </div>
           <span>review recommended</span>
-        </article>
+          </article>
+        </section>
+
+        <section id="homeCharts" class="charts-grid home-charts" aria-label="Breakdowns">
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Request Status</h2>
+            </div>
+            <div id="requestStatusChart" class="bar-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Work Item Status</h2>
+            </div>
+            <div id="backlogStatusChart" class="bar-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Requests by Release</h2>
+            </div>
+            <div id="requestReleaseChart" class="bar-list chart-scroll"></div>
+          </div>
+        </section>
+
+        <section id="moreChartsLinkRow" class="chart-link-row">
+          <button id="moreChartsLink" class="text-link" type="button">More Charts</button>
+        </section>
       </section>
 
-      <section id="toolbar" class="toolbar" aria-label="Filters">
+      <section id="toolbar" class="toolbar is-hidden" aria-label="Filters">
         <input id="searchInput" type="search" placeholder="Search, or use status:blocked agent:frontend-developer...">
         <div id="statusFilter" class="multi-filter">
           <button id="statusFilterButton" class="multi-filter-button" type="button" aria-expanded="false" aria-controls="statusFilterMenu">
@@ -127,43 +155,18 @@
           <div id="typeFilterMenu" class="multi-filter-menu" role="group" aria-label="Type filters"></div>
         </div>
         <button id="resetFiltersButton" class="reset-button" type="button">Reset</button>
-        <span class="filter-scope">Filters affect charts and records; metric cards are project totals.</span>
+        <span class="filter-scope">Filters affect records and the summary cards on this page.</span>
       </section>
 
-      <section id="activeFilters" class="active-filters" aria-label="Active filters"></section>
-
-      <section id="homeCharts" class="charts-grid home-charts" aria-label="Breakdowns">
-        <div class="panel">
-          <div class="panel-heading">
-            <h2>Request Status</h2>
-          </div>
-          <div id="requestStatusChart" class="bar-list"></div>
-        </div>
-        <div class="panel">
-          <div class="panel-heading">
-            <h2>Work Item Status</h2>
-          </div>
-          <div id="backlogStatusChart" class="bar-list"></div>
-        </div>
-        <div class="panel">
-          <div class="panel-heading">
-            <h2>Requests by Release</h2>
-          </div>
-          <div id="requestReleaseChart" class="bar-list chart-scroll"></div>
-        </div>
-      </section>
-
-      <section id="moreChartsLinkRow" class="chart-link-row">
-        <button id="moreChartsLink" class="text-link" type="button">More Charts</button>
-      </section>
+      <section id="activeFilters" class="active-filters is-hidden" aria-label="Active filters"></section>
 
       <section id="moreChartsPage" class="more-charts-page is-hidden">
         <div class="page-heading">
           <div>
             <h2>More Charts</h2>
             <div class="more-charts-intro">
-              <p>Request and work-item charts use current filters. Release charts show delivered history.</p>
-              <button id="backToViewerLink" class="text-link chart-page-back" type="button">← Back to overview</button>
+              <p>All charts show project-wide data. Release charts show delivered history.</p>
+              <button id="backToViewerLink" class="text-link chart-page-back" type="button">← Back to Dashboard</button>
             </div>
           </div>
         </div>
@@ -265,7 +268,24 @@
         </section>
       </section>
 
-      <section id="requestsView" class="data-view">
+      <section id="requestsView" class="data-view is-hidden">
+        <div class="view-summary-grid" aria-label="Filtered request totals">
+          <article class="view-metric">
+            <span class="metric-label">Matching Requests</span>
+            <strong id="requestFilteredTotal">0</strong>
+            <span>current filters</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Linked Requests</span>
+            <strong id="requestFilteredLinked">0</strong>
+            <span>has a work item</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Unlinked Requests</span>
+            <strong id="requestFilteredUnlinked">0</strong>
+            <span>needs delivery work</span>
+          </article>
+        </div>
         <div class="panel-heading">
           <h2>Requests</h2>
           <span id="requestCount" class="count-label"></span>
@@ -274,6 +294,23 @@
       </section>
 
       <section id="backlogView" class="data-view is-hidden">
+        <div class="view-summary-grid" aria-label="Filtered work item totals">
+          <article class="view-metric">
+            <span class="metric-label">Matching Work Items</span>
+            <strong id="workFilteredTotal">0</strong>
+            <span>current filters</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Ready Work Items</span>
+            <strong id="workFilteredReady">0</strong>
+            <span>ready to start</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Blocked Work Items</span>
+            <strong id="workFilteredBlocked">0</strong>
+            <span>needs attention</span>
+          </article>
+        </div>
         <div class="panel-heading">
           <h2>Work items</h2>
           <span id="backlogCount" class="count-label"></span>
@@ -282,6 +319,23 @@
       </section>
 
       <section id="linksView" class="data-view is-hidden">
+        <div class="view-summary-grid" aria-label="Filtered link totals">
+          <article class="view-metric">
+            <span class="metric-label">Valid Links</span>
+            <strong id="linkFilteredValid">0</strong>
+            <span>resolved references</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Missing Links</span>
+            <strong id="linkFilteredMissing">0</strong>
+            <span>unresolved references</span>
+          </article>
+          <article class="view-metric">
+            <span class="metric-label">Unlinked Requests</span>
+            <strong id="linkFilteredUnlinked">0</strong>
+            <span>needs a work item</span>
+          </article>
+        </div>
         <div class="panel-heading">
           <div class="view-heading-copy">
             <h2>Request and Work item links</h2>

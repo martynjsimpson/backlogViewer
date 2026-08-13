@@ -1,7 +1,7 @@
 const state = {
   data: null,
   page: "viewer",
-  view: "requests",
+  view: "dashboard",
   query: "",
   statuses: new Set(),
   types: new Set(),
@@ -29,6 +29,7 @@ const elements = {
   liveStatusButton: byId("liveStatusButton"),
   liveStatusText: byId("liveStatusText"),
   backToViewerLink: byId("backToViewerLink"),
+  dashboardView: byId("dashboardView"),
   summaryGrid: byId("summaryGrid"),
   homeCharts: byId("homeCharts"),
   moreChartsLinkRow: byId("moreChartsLinkRow"),
@@ -57,6 +58,15 @@ const elements = {
   requestCount: byId("requestCount"),
   backlogCount: byId("backlogCount"),
   linkCount: byId("linkCount"),
+  requestFilteredTotal: byId("requestFilteredTotal"),
+  requestFilteredLinked: byId("requestFilteredLinked"),
+  requestFilteredUnlinked: byId("requestFilteredUnlinked"),
+  workFilteredTotal: byId("workFilteredTotal"),
+  workFilteredReady: byId("workFilteredReady"),
+  workFilteredBlocked: byId("workFilteredBlocked"),
+  linkFilteredValid: byId("linkFilteredValid"),
+  linkFilteredMissing: byId("linkFilteredMissing"),
+  linkFilteredUnlinked: byId("linkFilteredUnlinked"),
   requestStatusChart: byId("requestStatusChart"),
   backlogStatusChart: byId("backlogStatusChart"),
   requestReleaseChart: byId("requestReleaseChart"),
@@ -679,6 +689,12 @@ function matchesRequestFilters(request, capabilityMap) {
   return [...state.capabilities].some((value) => capabilities.has(value));
 }
 
+function requestNeedsWorkItem(request, includeMissing = true) {
+  if (["duplicate", "rejected"].includes(request.status) || request.work_items_explicitly_none) return false;
+  if (request.resolved_backlog_items?.length) return false;
+  return includeMissing || !(request.unresolved_work_items?.length);
+}
+
 function buildCapabilityMap(requests, backlog) {
   const map = new Map(requests.map((request) => [request.id, new Set()]));
   for (const item of backlog) if (item.source_request && item.capability && map.has(item.source_request)) map.get(item.source_request).add(item.capability);
@@ -991,31 +1007,29 @@ function setPage(page) {
   const charts = page === "charts";
   elements.moreChartsPage.classList.toggle("is-hidden", !charts);
   elements.backToViewerLink.classList.toggle("is-hidden", !charts);
-  for (const element of [elements.summaryGrid, elements.homeCharts, elements.moreChartsLinkRow, elements.toolbar, elements.activeFilters, elements.requestsView, elements.backlogView, elements.linksView, elements.releaseView, elements.healthView]) element.classList.toggle("force-hidden", charts);
+  for (const element of [elements.dashboardView, elements.toolbar, elements.activeFilters, elements.requestsView, elements.backlogView, elements.linksView, elements.releaseView, elements.healthView]) element.classList.toggle("force-hidden", charts);
 }
 
 function setView(view, push = true) {
   if (state.page === "charts") setPage("viewer");
-  state.view = ["requests", "backlog", "links", "release", "health"].includes(view) ? view : "requests";
+  state.view = ["dashboard", "requests", "backlog", "links", "release", "health"].includes(view) ? view : "dashboard";
   state.page = "viewer";
   for (const button of document.querySelectorAll(".primary-tab")) button.classList.toggle("is-active", button.dataset.view === state.view);
+  elements.dashboardView.classList.toggle("is-hidden", state.view !== "dashboard");
   elements.requestsView.classList.toggle("is-hidden", state.view !== "requests");
   elements.backlogView.classList.toggle("is-hidden", state.view !== "backlog");
   elements.linksView.classList.toggle("is-hidden", state.view !== "links");
   elements.releaseView.classList.toggle("is-hidden", state.view !== "release");
   elements.healthView.classList.toggle("is-hidden", state.view !== "health");
-  const special = ["release", "health"].includes(state.view);
-  elements.summaryGrid.classList.toggle("is-hidden", special);
-  elements.homeCharts.classList.toggle("is-hidden", special);
-  elements.moreChartsLinkRow.classList.toggle("is-hidden", special);
-  elements.toolbar.classList.toggle("is-hidden", special);
-  elements.activeFilters.classList.toggle("is-hidden", special);
+  const working = ["requests", "backlog", "links"].includes(state.view);
+  elements.toolbar.classList.toggle("is-hidden", !working);
+  elements.activeFilters.classList.toggle("is-hidden", !working);
   if (push) syncUrl("push");
 }
 
 function syncUrl(mode = "replace") {
   const params = new URLSearchParams();
-  if (state.view !== "requests") params.set("view", state.view);
+  if (state.view !== "dashboard") params.set("view", state.view);
   if (state.query) params.set("q", state.query);
   if (state.statuses.size) params.set("status", [...state.statuses].join(","));
   if (state.types.size) params.set("type", [...state.types].join(","));
@@ -1032,7 +1046,7 @@ function syncUrl(mode = "replace") {
 function loadUrlState() {
   const params = new URLSearchParams(location.search);
   const list = (name) => new Set((params.get(name) || "").split(",").filter(Boolean));
-  state.view = params.get("view") || "requests";
+  state.view = params.get("view") || "dashboard";
   state.query = params.get("q") || "";
   state.statuses = list("status");
   state.types = list("type");
@@ -1095,17 +1109,26 @@ function render() {
   elements.requestCount.textContent = `${filteredRequests.length} shown of ${requests.length}`;
   elements.backlogCount.textContent = `${filteredBacklog.length} shown of ${backlog.length}`;
   elements.linkCount.textContent = `${filteredRequests.length} shown of ${requests.length}`;
+  elements.requestFilteredTotal.textContent = filteredRequests.length;
+  elements.requestFilteredLinked.textContent = filteredRequests.filter((request) => request.resolved_backlog_items?.length).length;
+  elements.requestFilteredUnlinked.textContent = filteredRequests.filter((request) => requestNeedsWorkItem(request)).length;
+  elements.workFilteredTotal.textContent = filteredBacklog.length;
+  elements.workFilteredReady.textContent = filteredBacklog.filter((item) => item.status === "ready").length;
+  elements.workFilteredBlocked.textContent = filteredBacklog.filter((item) => item.status === "blocked").length;
+  elements.linkFilteredValid.textContent = filteredRequests.reduce((count, request) => count + (request.resolved_backlog_items?.length || 0), 0);
+  elements.linkFilteredMissing.textContent = filteredRequests.reduce((count, request) => count + (request.unresolved_work_items?.length || 0), 0);
+  elements.linkFilteredUnlinked.textContent = filteredRequests.filter((request) => requestNeedsWorkItem(request, false)).length;
 
-  renderChart(elements.requestStatusChart, countBy(filteredRequests, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "requests", statuses: [status] }) });
-  renderChart(elements.backlogStatusChart, countBy(filteredBacklog, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "backlog", statuses: [status] }) });
+  renderChart(elements.requestStatusChart, countBy(requests, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "requests", statuses: [status] }) });
+  renderChart(elements.backlogStatusChart, countBy(backlog, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "backlog", statuses: [status] }) });
   const releases = {};
   for (const request of requests.filter((item) => ["done", "partially-done"].includes(item.status))) for (const value of completionBuckets(request)) releases[value] = (releases[value] || 0) + 1;
   renderChart(elements.requestReleaseChart, releases, { kind: "release", limit: Infinity, sortEntries: releaseSort, onClick: (release) => applyFilters({ view: "requests", deliveredRelease: release }) });
-  renderChart(elements.capabilityChart, countBy(filteredBacklog, "capability"), { kind: "capability", onClick: (capability) => applyFilters({ view: "backlog", capabilities: [capability] }) });
-  renderChart(elements.requestTypeChart, countBy(filteredRequests, "type"), { kind: "type" });
-  renderChart(elements.requestPriorityChart, countBy(filteredRequests, "priority"), { kind: "priority" });
-  renderChart(elements.requestSectionChart, countBy(filteredRequests, "section"));
-  renderChart(elements.requestLinkCoverageChart, filteredRequests.reduce((counts, request) => {
+  renderChart(elements.capabilityChart, countBy(backlog, "capability"), { kind: "capability", onClick: (capability) => applyFilters({ view: "backlog", capabilities: [capability] }) });
+  renderChart(elements.requestTypeChart, countBy(requests, "type"), { kind: "type" });
+  renderChart(elements.requestPriorityChart, countBy(requests, "priority"), { kind: "priority" });
+  renderChart(elements.requestSectionChart, countBy(requests, "section"));
+  renderChart(elements.requestLinkCoverageChart, requests.reduce((counts, request) => {
     const key = request.resolved_backlog_items.length ? "Linked to work item" : request.work_items_explicitly_none ? "No work required" : "No work item";
     counts[key] = (counts[key] || 0) + 1;
     return counts;
@@ -1113,10 +1136,10 @@ function render() {
   renderStackedChart(elements.releaseTypeChart, groupedByCompletion(requests, "type"), { kind: "type" });
   renderStackedChart(elements.releasePriorityChart, groupedByCompletion(requests, "priority"), { kind: "priority" });
   renderStackedChart(elements.releaseCompletenessChart, groupedByCompletion(requests, "delivery_status"), { kind: "status" });
-  renderChart(elements.backlogTypeChart, countBy(filteredBacklog, "type"), { kind: "type" });
-  renderChart(elements.backlogPriorityChart, countBy(filteredBacklog, "priority"), { kind: "priority" });
-  renderChart(elements.agentChart, countArrayValues(filteredBacklog, "suggested_agents"));
-  renderChart(elements.backlogSourceCoverageChart, filteredBacklog.reduce((counts, item) => {
+  renderChart(elements.backlogTypeChart, countBy(backlog, "type"), { kind: "type" });
+  renderChart(elements.backlogPriorityChart, countBy(backlog, "priority"), { kind: "priority" });
+  renderChart(elements.agentChart, countArrayValues(backlog, "suggested_agents"));
+  renderChart(elements.backlogSourceCoverageChart, backlog.reduce((counts, item) => {
     const key = item.has_request ? "Has matching request" : "No matching request";
     counts[key] = (counts[key] || 0) + 1;
     return counts;

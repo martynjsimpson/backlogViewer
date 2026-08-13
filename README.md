@@ -49,16 +49,23 @@ npx work-management-viewer --project /path/to/project
 
 ## What it shows
 
-- **Requests** — human-facing asks with status/type filtering, qualified search, and delivery links.
-- **Work items** — YAML work records, including blockers, dependencies, agents, and completion.
-- **Links** — request-to-work relationships, including missing and intentionally empty links.
+- **Dashboard** — project-wide metrics and charts, kept independent of record filters.
+- **Requests** — human-facing asks with filtered summary metrics, qualified search, and delivery links.
+- **Work items** — YAML work records with filtered ready and blocked totals, plus dependencies, agents,
+  and completion.
+- **Links** — filtered link-health totals and request-to-work relationships, including missing and
+  intentionally empty links.
 - **Active release** — scope, status, decisions, agents, blockers, and verification information.
 - **Health** — actionable errors, warnings, and recommendations for model conformance.
-- **Charts** — request, work-item, capability, priority, and delivered-release breakdowns.
+- **More Charts** — project-wide request, work-item, capability, priority, and delivered-release
+  breakdowns.
 
 Filter and navigation state is encoded in the URL, so filtered views can be bookmarked and browser
 history behaves normally. Search accepts text and qualified terms such as `status:blocked`,
 `type:spike`, `agent:frontend-developer`, and `capability:imports`.
+
+Dashboard totals and charts always represent the whole project. Selecting a chart row opens the
+relevant filtered record view, where the filter bar and its three summary metrics work together.
 
 ## Live updates
 
