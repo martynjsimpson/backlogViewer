@@ -231,6 +231,7 @@ function appendReleaseInline(container, value, allowBold = true, linkIds = true)
 
 function renderReleaseMarkdown(value) {
   const fragment = document.createDocumentFragment();
+  const lines = String(value ?? "").split(/\r?\n/);
   let paragraphLines = [];
   let currentList = null;
   let currentListTag = "";
@@ -250,11 +251,54 @@ function renderReleaseMarkdown(value) {
     currentItem = null;
   }
 
-  for (const rawLine of String(value ?? "").split(/\r?\n/)) {
+  function appendTable(parsed) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "release-table-wrap";
+    const table = document.createElement("table");
+    table.className = "release-table";
+    const head = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    parsed.headers.forEach((value, index) => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.className = `align-${parsed.alignments[index]}`;
+      appendReleaseInline(cell, value);
+      headRow.append(cell);
+    });
+    head.append(headRow);
+    table.append(head);
+    if (parsed.rows.length) {
+      const body = document.createElement("tbody");
+      for (const row of parsed.rows) {
+        const tableRow = document.createElement("tr");
+        row.forEach((value, index) => {
+          const cell = document.createElement("td");
+          cell.className = `align-${parsed.alignments[index]}`;
+          appendReleaseInline(cell, value);
+          tableRow.append(cell);
+        });
+        body.append(tableRow);
+      }
+      table.append(body);
+    }
+    wrapper.append(table);
+    fragment.append(wrapper);
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
     const trimmed = rawLine.trim();
     if (!trimmed || /^---+$/.test(trimmed)) {
       flushParagraph();
       closeList();
+      continue;
+    }
+    const parsedTable = globalThis.ReleaseMarkdown.parseTable(lines, index);
+    if (parsedTable) {
+      flushParagraph();
+      closeList();
+      appendTable(parsedTable);
+      index = parsedTable.nextIndex - 1;
       continue;
     }
     const listMatch = rawLine.match(/^\s*(?:([-+*])|(\d+)[.)])\s+(.+)$/);

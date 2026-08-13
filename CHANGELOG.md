@@ -5,6 +5,13 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-13
+
+### Fixed
+
+- Render Markdown tables in Active Release prose with safe inline formatting, navigable Request
+  and Work Item IDs, column alignment, and horizontal overflow on narrow screens.
+
 ## [0.6.0] - 2026-08-13
 
 ### Added
