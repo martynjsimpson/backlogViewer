@@ -16,9 +16,35 @@ test("discovers the conventional docs/work manifest from a nested directory", as
   const nested = path.join(root, "src", "nested");
   await fs.mkdir(path.join(root, "docs", "work"), { recursive: true });
   await fs.mkdir(nested, { recursive: true });
-  await fs.writeFile(path.join(root, "docs", "work", "project.yml"), "model_version: 3\n");
+  await fs.writeFile(path.join(root, "docs", "work", "project.yml"), "model_version: 4\n");
   const result = await discoverManifest(nested);
   assert.equal(result.manifestFile, path.join(root, "docs", "work", "project.yml"));
+});
+
+test("resolves model v4 monorepo paths from the project boundary", async (context) => {
+  const repositoryRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-monorepo-"));
+  context.after(() => fs.rm(repositoryRoot, { recursive: true, force: true }));
+  const projectRoot = path.join(repositoryRoot, "apps", "tool-a");
+  const manifestFile = path.join(projectRoot, "docs", "work", "project.yml");
+  const nested = path.join(projectRoot, "src", "nested");
+  await fs.mkdir(path.dirname(manifestFile), { recursive: true });
+  await fs.mkdir(nested, { recursive: true });
+  // Worktrees expose `.git` as a file, which is still a valid repository boundary.
+  await fs.writeFile(path.join(repositoryRoot, ".git"), "gitdir: /tmp/example\n");
+  const fixtureManifest = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
+  const scopedManifest = fixtureManifest
+    .replace("root: null", "root: apps/tool-a")
+    .replace("system: none", "system: git")
+    .replace("changelog: CHANGELOG.md", "changelog: /CHANGELOG.md");
+  await fs.writeFile(manifestFile, scopedManifest);
+
+  const config = await loadProjectConfiguration(nested);
+  assert.equal(config.manifestFile, manifestFile);
+  assert.equal(config.root, projectRoot);
+  assert.equal(config.vcsRoot, repositoryRoot);
+  assert.equal(config.workDir, path.join(projectRoot, "work"));
+  assert.equal(config.files.changelog, path.join(repositoryRoot, "CHANGELOG.md"));
+  assert.equal(config.resolveProjectPath("/shared/config.yml"), path.join(repositoryRoot, "shared", "config.yml"));
 });
 
 test("stops on a stale manifest before reading project fields", async (context) => {
@@ -27,6 +53,37 @@ test("stops on a stale manifest before reading project fields", async (context) 
   const manifest = path.join(root, "project.yml");
   await fs.writeFile(manifest, "model_version: 2\n");
   await assert.rejects(() => loadProjectConfiguration(manifest), (error) => error instanceof ConfigurationError && error.code === "UNSUPPORTED_MODEL_VERSION");
+});
+
+test("continues to load a conforming model v3 manifest", async (context) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-v3-"));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const manifest = path.join(root, "project.yml");
+  const source = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
+  const versionThreeSource = source
+    .replace("model_version: 4", "model_version: 3")
+    .replace(/scope:\n  root: null\n  writes_outside: \[\]\n  agents_dir: project\n/, "")
+    .replace("  tag_template: null\n", "");
+  await fs.writeFile(manifest, versionThreeSource);
+
+  const config = await loadProjectConfiguration(manifest);
+  assert.equal(config.manifest.model_version, 3);
+  assert.equal(config.root, root);
+  assert.equal(config.workDir, path.join(root, "work"));
+});
+
+test("rejects a model v4 manifest that omits its new compatibility fields", async (context) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-shape-"));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const manifest = path.join(root, "project.yml");
+  const source = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
+  await fs.writeFile(manifest, source.replace("  tag_template: null\n", ""));
+  await assert.rejects(
+    () => loadProjectConfiguration(manifest),
+    (error) => error instanceof ConfigurationError
+      && error.code === "INVALID_MANIFEST_SHAPE"
+      && error.details.includes("version.tag_template"),
+  );
 });
 
 test("links both directions and validates a conforming fixture", async () => {

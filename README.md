@@ -20,7 +20,7 @@ and migrations remain the plugin's responsibility.
 ## Requirements
 
 - Node.js 20 or newer
-- A work-management manifest using `model_version: 3`
+- A work-management manifest using `model_version: 3` or `model_version: 4`
 
 ## Quick start
 
@@ -97,7 +97,12 @@ Discovery stops at the Git repository root when one exists. No conventional work
 used after discovery: `paths.work`, `paths.spikes`, `paths.changelog`, both ID prefixes, taxonomy,
 and the agent roster all come from the manifest.
 
-The viewer supports manifest schema version 3. Older, newer, missing, or shape-incompatible
+In a version 4 manifest, `scope.root` selects a monorepo member's project boundary. Relative
+manifest paths resolve from that project root; paths beginning with `/` resolve from the VCS root,
+matching the plugin's model. Project metric history and filesystem watching remain scoped to the
+selected member rather than its siblings.
+
+The viewer supports manifest schema versions 3 and 4. Other, missing, or shape-incompatible
 manifests produce a clear startup error. They are never auto-migrated.
 
 ## Metric history
@@ -152,10 +157,21 @@ change events, local HTTP protections, and per-project metric-history isolation.
 
 ## Compatibility contract
 
-`SUPPORTED_MODEL_VERSION` lives in `src/constants.js`. When the plugin introduces a breaking
-manifest schema, the viewer must update that constant, its manifest shape checks, fixtures,
-parsers, and Health rules together. Until then it fails closed rather than rendering plausible but
-incorrect data.
+This codebase was last verified against
+[Work Management Claude Plugin v1.3.0](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.3.0)
+and its `model_version: 4` manifest on 18 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
+`src/constants.js`; the viewer deliberately retains version 3 compatibility and fails closed on
+any unlisted version rather than rendering plausible but incorrect data.
+
+Before every viewer release:
+
+1. Check the plugin's releases and `CHANGELOG.md` for everything newer than the version recorded
+   above.
+2. Compare the current plugin `templates/project.yml` and model documentation with the viewer's
+   manifest shape checks, path resolution, parsers, Health rules, and test fixtures.
+3. Implement any compatibility changes and run `npm run check`. Exercise a real project when the
+   data model or rendering contract changed.
+4. Update the verified plugin version and date above, even when the audit requires no code change.
 
 ## License
 

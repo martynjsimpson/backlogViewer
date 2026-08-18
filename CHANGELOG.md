@@ -5,6 +5,21 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-18
+
+### Added
+
+- Support the plugin v1.3.0 `model_version: 4` manifest, including monorepo project boundaries and
+  repository-root-anchored paths, while retaining full `model_version: 3` compatibility.
+
+### Changed
+
+- Scope file discovery, metric history, and live watching to the selected monorepo member while
+  resolving Git metadata from the containing VCS root.
+- Recognise Git worktrees whose `.git` metadata is a file rather than a directory.
+- Document the last verified Claude plugin version and a mandatory compatibility audit for every
+  viewer release.
+
 ## [0.7.0] - 2026-08-18
 
 ### Added

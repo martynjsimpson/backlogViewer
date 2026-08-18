@@ -126,8 +126,8 @@ const FINDING_GUIDANCE = {
   }),
   VCS_MISMATCH: () => ({
     action_type: "review",
-    meaning: "project.yml declares Git ownership rules, but the resolved project root has no .git directory. Release commands cannot safely follow the declared VCS workflow.",
-    recommended_action: "Confirm the viewer is pointed at the real repository root. If this project intentionally has no Git repository, change vcs.system in project.yml; otherwise initialise or restore the missing repository metadata.",
+    meaning: "project.yml declares Git ownership rules, but the viewer could not find repository metadata at the resolved VCS root. Release commands cannot safely follow the declared VCS workflow.",
+    recommended_action: "Confirm the viewer is pointed at the intended project inside the correct repository. If this project intentionally has no Git repository, change vcs.system in project.yml; otherwise initialise or restore the missing repository metadata.",
   }),
   MISSING_CHANGELOG: () => ({
     action_type: "fix",
@@ -246,7 +246,7 @@ async function validatePathsAndOwnership(findings, config) {
   ]);
 
   for (const entry of allRules.filter((entry) => !pathHasGlob(entry.rule))) {
-    if (!(await exists(path.resolve(config.root, entry.rule)))) {
+    if (!(await exists(config.resolveProjectPath(entry.rule)))) {
       findings.push(finding(
         "warning",
         "MISSING_AGENT_PATH",
@@ -391,7 +391,7 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     if (selected.source && live.source_request && selected.source !== live.source_request) findings.push(finding("error", "RELEASE_SOURCE_DRIFT", "Active-release source differs from backlog", `${selected.id}: ${selected.source} / ${live.source_request}`, { entity_type: "work", entity_id: selected.id }));
   }
 
-  if (manifest.vcs.system === "git" && !(await exists(path.join(config.root, ".git")))) findings.push(finding("warning", "VCS_MISMATCH", "Review the Git repository mismatch", config.root, { entity_type: "manifest", entity_id: "vcs.system" }));
+  if (manifest.vcs.system === "git" && !(await exists(path.join(config.vcsRoot, ".git")))) findings.push(finding("warning", "VCS_MISMATCH", "Review the Git repository mismatch", config.vcsRoot, { entity_type: "manifest", entity_id: "vcs.system" }));
   if (manifest.vcs.system === "none" && !manifest.version.file) findings.push(finding("error", "VERSION_FILE_REQUIRED", "A non-Git project requires version.file", "There is no tag to hold the version.", { entity_type: "manifest", entity_id: "version.file" }));
   if (config.files.changelog && !(await exists(config.files.changelog))) findings.push(finding("warning", "MISSING_CHANGELOG", "Create or correct the configured changelog", config.files.changelog, { entity_type: "manifest", entity_id: "paths.changelog" }));
   await validatePathsAndOwnership(findings, config);

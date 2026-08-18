@@ -1,8 +1,12 @@
-model_version: 3
+model_version: 4
 project:
   name: Fixture Project
   description: Test fixture for custom work-management identifiers
   primary_reference: README.md
+scope:
+  root: null
+  writes_outside: []
+  agents_dir: project
 paths:
   work: work
   spikes: spikes
@@ -27,6 +31,7 @@ version:
   owner: command
   file: VERSION
   mirrors: []
+  tag_template: null
 release:
   changelog: required
   pipeline: null
