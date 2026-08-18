@@ -7,7 +7,7 @@ const path = require("path");
 const { ConfigurationError, loadProjectConfiguration } = require("./src/config");
 const { updateWidgetHistory } = require("./src/history");
 const { buildHealth, calculateWidgets, createSummaries, linkModel } = require("./src/model");
-const { parseActiveRelease, parseBacklog, parseRequests } = require("./src/parsers");
+const { parseActiveRelease, parseBacklog, parseReleaseDates, parseRequests } = require("./src/parsers");
 
 const publicDir = path.join(__dirname, "public");
 const allowedHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -175,10 +175,11 @@ async function readOptional(file) {
 }
 
 async function getData(config) {
-  const [requestsMarkdown, backlogYaml, activeReleaseMarkdown] = await Promise.all([
+  const [requestsMarkdown, backlogYaml, activeReleaseMarkdown, changelogMarkdown] = await Promise.all([
     fs.readFile(config.files.requests, "utf8"),
     fs.readFile(config.files.backlog, "utf8"),
     readOptional(config.files.activeRelease),
+    config.files.changelog ? readOptional(config.files.changelog) : "",
   ]);
   const requestDocument = parseRequests(requestsMarkdown, config.ids);
   const backlogDocument = parseBacklog(backlogYaml, config.ids);
@@ -211,6 +212,7 @@ async function getData(config) {
     },
     requests: linked.requests,
     backlog: linked.backlog,
+    release_dates: parseReleaseDates(changelogMarkdown),
     active_release: activeRelease,
     health,
     widgets,

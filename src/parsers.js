@@ -28,6 +28,14 @@ function splitOutsideParentheses(value) {
 }
 
 function parseCompletionValues(value, ids) {
+  if (value && typeof value === "object") {
+    return [{
+      kind: "invalid",
+      raw: YAML.stringify(value, { lineWidth: 0 }).trim(),
+      value,
+      non_scalar: true,
+    }];
+  }
   return splitOutsideParentheses(value).map((raw) => {
     const spikeMatch = raw.match(new RegExp(`^SPIKE:\\s*(${ids.workPrefix}-\\d+[A-Z]?)$`, "i"));
     if (spikeMatch) return { kind: "spike", raw, value: spikeMatch[1].toUpperCase() };
@@ -37,6 +45,18 @@ function parseCompletionValues(value, ids) {
     }
     return { kind: "invalid", raw, value: raw };
   });
+}
+
+function parseReleaseDates(markdown) {
+  const dates = {};
+  const heading = /^#{1,6}\s+\[?(v?\d+(?:\.\d+){2})\]?\s*(?:[-–—:]\s*|\(\s*)(\d{4}-\d{2}-\d{2})\)?(?:\s|$)/i;
+  for (const line of String(markdown || "").split(/\r?\n/)) {
+    const match = line.match(heading);
+    if (!match) continue;
+    const version = match[1].replace(/^v/i, "");
+    dates[version] ||= match[2];
+  }
+  return dates;
 }
 
 function parseWorkItemReferences(value, ids) {
@@ -59,6 +79,7 @@ function parseRequests(markdown, ids) {
   let section = "";
   let current = null;
   let lastKey = null;
+  let activeFence = null;
 
   function finishCurrent() {
     if (!current) return;
@@ -73,6 +94,22 @@ function parseRequests(markdown, ids) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    const fenceMarker = line.match(/^\s*(`{3,}|~{3,})/);
+    if (activeFence) {
+      if (current) current._rawLines.push(line);
+      if (
+        fenceMarker
+        && fenceMarker[1][0] === activeFence.character
+        && fenceMarker[1].length >= activeFence.length
+        && !line.slice(fenceMarker[0].length).trim()
+      ) activeFence = null;
+      continue;
+    }
+    if (fenceMarker) {
+      if (current) current._rawLines.push(line);
+      activeFence = { character: fenceMarker[1][0], length: fenceMarker[1].length };
+      continue;
+    }
     const sectionMatch = line.match(/^##\s+(.+)$/);
     if (sectionMatch) {
       section = sectionMatch[1].trim();
@@ -235,6 +272,7 @@ module.exports = {
   parseActiveRelease,
   parseBacklog,
   parseCompletionValues,
+  parseReleaseDates,
   parseRequests,
   parseWorkItemReferences,
   splitOutsideParentheses,

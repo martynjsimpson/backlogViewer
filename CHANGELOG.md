@@ -5,6 +5,22 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-18
+
+### Added
+
+- Show each known release date beneath its version in the Requests by Release chart, using the
+  project changelog declared by `project.yml` as the source of truth.
+
+### Fixed
+
+- Ignore request-shaped examples and other documentation inside fenced Markdown code blocks when
+  parsing `requests.md`.
+- Require `Done in` on a completed request only when a `done` work item derived from that request
+  carries valid release evidence; decision-only and other release-less requests are now valid.
+- Report unquoted YAML `SPIKE:` mappings as explicit non-scalar completion errors with corrective
+  guidance.
+
 ## [0.6.1] - 2026-08-13
 
 ### Fixed

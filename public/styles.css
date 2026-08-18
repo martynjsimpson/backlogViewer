@@ -521,6 +521,18 @@ button:hover {
   text-align: left;
 }
 
+.bar-label {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.bar-detail {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 .chart-empty {
   display: grid;
   min-height: 64px;

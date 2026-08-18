@@ -5,7 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 const { ConfigurationError, discoverManifest, loadProjectConfiguration } = require("../src/config");
 const { buildHealth, calculateWidgets, createFinding, linkModel } = require("../src/model");
-const { parseActiveRelease, parseBacklog, parseRequests } = require("../src/parsers");
+const { parseActiveRelease, parseBacklog, parseCompletionValues, parseRequests } = require("../src/parsers");
 const { getData, usage } = require("../server");
 
 const fixtureRoot = path.join(__dirname, "fixtures", "custom-project");
@@ -46,6 +46,42 @@ test("links both directions and validates a conforming fixture", async () => {
   assert.equal(calculateWidgets(linked.requests, linked.backlog, activeRelease, health).activeReleaseRequests, 1);
 });
 
+test("requires request completion only when derived work shipped in a release", async () => {
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  const [requestSource, backlogSource, releaseSource] = await Promise.all([
+    fs.readFile(config.files.requests, "utf8"),
+    fs.readFile(config.files.backlog, "utf8"),
+    fs.readFile(config.files.activeRelease, "utf8"),
+  ]);
+  const requestDocument = parseRequests(requestSource, config.ids);
+  const backlogDocument = parseBacklog(backlogSource, config.ids);
+  const activeRelease = parseActiveRelease(releaseSource, config.ids);
+  const request = requestDocument.items.find((item) => item.id === "ASK-0001");
+  request.done_in = [];
+
+  const referredWork = {
+    ...backlogDocument.items[0],
+    id: "TASK-0003",
+    source_request: "ASK-0002",
+    status: "done",
+    done_in: parseCompletionValues("v1.2.3", config.ids),
+  };
+  backlogDocument.items.push(referredWork);
+  request.work_items.push(referredWork.id);
+
+  let linked = linkModel(requestDocument.items, backlogDocument.items);
+  let health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+  assert.equal(health.findings.some((finding) => finding.code === "COMPLETION_MISSING" && finding.entity_id === request.id), false);
+
+  const derivedWork = backlogDocument.items.find((item) => item.id === "TASK-0001");
+  derivedWork.status = "done";
+  derivedWork.done_in = parseCompletionValues("v1.2.3", config.ids);
+  linked = linkModel(requestDocument.items, backlogDocument.items);
+  health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+  const finding = health.findings.find((entry) => entry.code === "COMPLETION_MISSING" && entry.entity_id === request.id);
+  assert.match(finding.message, /TASK-0001: v1\.2\.3/);
+});
+
 test("builds the complete API model from a project manifest", async (context) => {
   const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-state-"));
   context.after(async () => {
@@ -57,6 +93,7 @@ test("builds the complete API model from a project manifest", async (context) =>
   const data = await getData(config);
   assert.equal(data.project.name, "Fixture Project");
   assert.equal(data.active_release.status, "proposed");
+  assert.deepEqual(data.release_dates, { "1.2.3": "2025-04-06" });
   assert.deepEqual(data.health.summary, { errors: 0, warnings: 0, recommendations: 0, total: 0 });
   assert.equal(data.widgets.healthErrors, 0);
   assert.match(data.widget_history.state_file, /[a-f0-9]{16}\.json$/);
@@ -100,6 +137,16 @@ test("turns health codes into concrete remediation guidance", () => {
   assert.equal(pruning.action_type, "maintenance");
   assert.equal(pruning.command, "/work-prune");
   assert.match(pruning.meaning, /No immediate correctness fix is required/);
+
+  const nonScalar = createFinding(
+    "error",
+    "NON_SCALAR_COMPLETION_VALUE",
+    "Quote this non-scalar completion value",
+    "SPIKE: TASK-0001",
+    { entity_type: "work", entity_id: "TASK-0001" },
+  );
+  assert.match(nonScalar.meaning, /object rather than a string/);
+  assert.match(nonScalar.recommended_action, /quote the whole marker/i);
 
   const otherWarningCodes = [
     ["INVALID_COMPLETION_VALUE", "Replace this free-text completion value", { entity_type: "work", entity_id: "TASK-0001" }],

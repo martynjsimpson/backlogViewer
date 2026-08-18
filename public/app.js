@@ -765,6 +765,14 @@ function releaseSort(entries) {
   });
 }
 
+function releaseDate(value) {
+  const stored = state.data.release_dates?.[String(value).replace(/^v/i, "")];
+  const match = stored?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${Number(match[3])} ${months[Number(match[2]) - 1]} ${match[1]}`;
+}
+
 function renderChart(container, counts, options = {}) {
   const limit = options.limit ?? 20;
   const entries = (options.sortEntries ? options.sortEntries(Object.entries(counts || {})) : sortedEntries(counts)).slice(0, limit);
@@ -784,6 +792,16 @@ function renderChart(container, counts, options = {}) {
     const nameNode = document.createElement("span");
     nameNode.className = "tag-label";
     nameNode.textContent = name;
+    const labelNode = document.createElement("span");
+    labelNode.className = "bar-label";
+    labelNode.append(nameNode);
+    const detail = options.detailFor?.(name);
+    if (detail) {
+      const detailNode = document.createElement("span");
+      detailNode.className = "bar-detail";
+      detailNode.textContent = detail;
+      labelNode.append(detailNode);
+    }
     const track = document.createElement("span");
     track.className = "bar-track";
     const fill = document.createElement("span");
@@ -792,7 +810,7 @@ function renderChart(container, counts, options = {}) {
     track.append(fill);
     const countNode = document.createElement("strong");
     countNode.textContent = count;
-    row.append(nameNode, track, countNode);
+    row.append(labelNode, track, countNode);
     container.append(row);
   }
 }
@@ -1167,7 +1185,7 @@ function render() {
   renderChart(elements.backlogStatusChart, countBy(backlog, "status"), { kind: "status", onClick: (status) => applyFilters({ view: "backlog", statuses: [status] }) });
   const releases = {};
   for (const request of requests.filter((item) => ["done", "partially-done"].includes(item.status))) for (const value of completionBuckets(request)) releases[value] = (releases[value] || 0) + 1;
-  renderChart(elements.requestReleaseChart, releases, { kind: "release", limit: Infinity, sortEntries: releaseSort, onClick: (release) => applyFilters({ view: "requests", deliveredRelease: release }) });
+  renderChart(elements.requestReleaseChart, releases, { kind: "release", limit: Infinity, sortEntries: releaseSort, detailFor: releaseDate, onClick: (release) => applyFilters({ view: "requests", deliveredRelease: release }) });
   renderChart(elements.capabilityChart, countBy(backlog, "capability"), { kind: "capability", onClick: (capability) => applyFilters({ view: "backlog", capabilities: [capability] }) });
   renderChart(elements.requestTypeChart, countBy(requests, "type"), { kind: "type" });
   renderChart(elements.requestPriorityChart, countBy(requests, "priority"), { kind: "priority" });
@@ -1198,6 +1216,7 @@ function dataSignature(payload) {
     project: payload.project,
     requests: payload.requests,
     backlog: payload.backlog,
+    release_dates: payload.release_dates,
     active_release: payload.active_release,
     health: payload.health,
     widgets: payload.widgets,

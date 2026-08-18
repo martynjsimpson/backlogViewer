@@ -79,6 +79,11 @@ const FINDING_GUIDANCE = {
     meaning: "Completion fields accept only a release version or SPIKE: <work-item ID>. This free text cannot be linked to durable delivery evidence or safely processed by pruning.",
     recommended_action: `In ${entity.entity_id}, replace "${message}" with the actual release version, or SPIKE: <work-item ID> when a spike document is the deliverable. If neither exists, move the prose to ${entity.entity_type === "request" ? "Notes:" : "remaining:"} and review whether the item should be marked done.`,
   }),
+  NON_SCALAR_COMPLETION_VALUE: ({ entity }) => ({
+    action_type: "fix",
+    meaning: "This YAML completion entry is an object rather than a string, usually because a SPIKE: marker was not quoted. The file parses, but the value cannot be interpreted as release evidence.",
+    recommended_action: `In ${entity.entity_id}, quote the whole marker, for example "SPIKE: ${entity.entity_id}", so done_in contains a string rather than a YAML mapping.`,
+  }),
   MISSING_AGENT_PATH: ({ entity }) => ({
     action_type: "review",
     meaning: "An exact path in this agent's owns, excludes, or reads rules does not exist in the project. The rule may be stale, misspelled, or describe a directory that has not been created yet.",
@@ -169,6 +174,10 @@ function validVersion(value, scheme) {
 
 function validateCompletion(findings, owner, kind, values, scheme, ids) {
   for (const completion of values || []) {
+    if (completion.non_scalar) {
+      findings.push(finding("error", "NON_SCALAR_COMPLETION_VALUE", "Quote this non-scalar completion value", completion.raw, owner));
+      continue;
+    }
     if (completion.kind === "spike") {
       if (!ids.workPattern.test(completion.value)) {
         findings.push(finding("error", "INVALID_SPIKE_MARKER", "Invalid spike completion marker", completion.raw, owner));
@@ -301,6 +310,17 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
   const priorities = new Set(manifest.taxonomy.priorities || []);
   const agentNames = new Set((manifest.agents || []).map((agent) => agent.name));
   const inactiveAgentNames = new Set((manifest.inactive_agents || []).map((agent) => agent.name));
+  const deliveredWorkByRequest = new Map();
+  for (const item of backlog.filter((entry) => entry.status === "done")) {
+    const releases = (item.done_in || []).filter((completion) => (
+      completion.kind === "release" && validVersion(completion.value, manifest.version.scheme)
+    ));
+    if (!releases.length) continue;
+    for (const requestId of item.source_requests || []) {
+      if (!deliveredWorkByRequest.has(requestId)) deliveredWorkByRequest.set(requestId, []);
+      deliveredWorkByRequest.get(requestId).push({ item, releases });
+    }
+  }
 
   compareRequestSections(findings, requestDocument.metadata);
   if (backlogDocument.modelVersion !== SUPPORTED_BACKLOG_MODEL_VERSION) {
@@ -317,7 +337,15 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     for (const unknown of request.unknown_fields || []) findings.push(finding("warning", "UNKNOWN_REQUEST_FIELD", `Move unsupported request field: ${unknown.name}`, `Line ${unknown.line}: ${unknown.value}`, owner));
     if (request.status === "blocked" && !request.blocked_on) findings.push(finding("error", "BLOCKED_WITHOUT_REASON", "Blocked request is missing Blocked on", "Add the named dependency.", owner));
     if (request.status === "deferred" && request.blocked_on) findings.push(finding("error", "DEFERRED_WITH_BLOCKER", "Deferred request carries Blocked on", request.blocked_on, owner));
-    if (["done", "partially-done"].includes(request.status) && !(request.done_in || []).length) findings.push(finding("error", "COMPLETION_MISSING", "Completed request is missing Done in", request.status, owner));
+    const deliveredWork = deliveredWorkByRequest.get(request.id) || [];
+    if (
+      !(request.done_in || []).length
+      && (request.status === "partially-done" || (request.status === "done" && deliveredWork.length))
+    ) {
+      const evidence = deliveredWork.flatMap(({ item, releases }) => releases
+        .map((completion) => `${item.id}: ${completion.value}`));
+      findings.push(finding("error", "COMPLETION_MISSING", "Completed request is missing Done in", evidence.join(", ") || request.status, owner));
+    }
     if (request.status === "partially-done" && !request.notes) findings.push(finding("error", "PARTIAL_WITHOUT_NOTES", "Partially done request is missing remaining-scope notes", "Add Notes describing what remains.", owner));
     validateCompletion(findings, owner, "request", request.done_in, manifest.version.scheme, config.ids);
     for (const id of request.unresolved_work_items || []) findings.push(finding("error", "MISSING_WORK_ITEM", "Work items reference does not resolve", id, owner));

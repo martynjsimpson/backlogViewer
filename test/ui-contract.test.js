@@ -17,6 +17,8 @@ test("uses the project-wide Dashboard as the default view", () => {
   assert.match(script, /countBy\(requests, "status"\)/);
   assert.match(script, /countBy\(backlog, "status"\)/);
   assert.doesNotMatch(script, /countBy\(filtered(?:Requests|Backlog), "status"\)/);
+  assert.match(script, /detailFor: releaseDate/);
+  assert.match(script, /release_dates: payload\.release_dates/);
 });
 
 test("keeps filter-aware summaries on each record view", () => {

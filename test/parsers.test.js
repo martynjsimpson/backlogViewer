@@ -3,7 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const test = require("node:test");
 const { loadProjectConfiguration } = require("../src/config");
-const { parseActiveRelease, parseBacklog, parseCompletionValues, parseRequests, parseWorkItemReferences } = require("../src/parsers");
+const { parseActiveRelease, parseBacklog, parseCompletionValues, parseReleaseDates, parseRequests, parseWorkItemReferences } = require("../src/parsers");
 
 const fixtureRoot = path.join(__dirname, "fixtures", "custom-project");
 
@@ -16,6 +16,39 @@ test("parses custom prefixes, work links, and multiple completion values", async
   assert.deepEqual(done.work_items, ["TASK-0001", "TASK-0002"]);
   assert.deepEqual(done.done_in.map((entry) => [entry.kind, entry.value]), [["release", "v1.2.3"], ["spike", "TASK-0002"]]);
   assert.equal(document.items.find((request) => request.id === "ASK-0002").summary, "This summary includes a sentence with Word: value and must stay intact.");
+});
+
+test("ignores request-shaped examples inside Markdown fences", () => {
+  const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
+  const document = parseRequests(`
+# Requests
+
+## Inbox / needs refinement
+
+\`\`\`text
+### ASK-0001
+Request ID: ASK-0001
+Title: Example only
+Type: <type>
+Status: <status>
+Priority: <priority>
+\`\`\`
+
+## Done
+
+### ASK-0001
+Request ID: ASK-0001
+Title: The real request
+Type: feature
+Status: done
+Priority: low
+Summary: Real data.
+`, ids);
+
+  assert.equal(document.items.length, 1);
+  assert.equal(document.items[0].title, "The real request");
+  assert.equal(document.items[0].type, "feature");
+  assert.deepEqual(document.metadata.sections.map((section) => section.title), ["Inbox / needs refinement", "Done"]);
 });
 
 test("uses YAML semantics for folded and literal block scalars", async () => {
@@ -43,6 +76,27 @@ test("classifies annotated releases and invalid legacy prose", () => {
   assert.equal(values[0].kind, "release");
   assert.equal(values[0].annotation, "partial");
   assert.equal(values[1].kind, "invalid");
+});
+
+test("classifies an unquoted spike mapping as a non-scalar completion", () => {
+  const [completion] = parseCompletionValues({ SPIKE: "TASK-0002" }, { workPrefix: "TASK" });
+  assert.equal(completion.kind, "invalid");
+  assert.equal(completion.non_scalar, true);
+  assert.match(completion.raw, /SPIKE: TASK-0002/);
+});
+
+test("parses release dates from common changelog heading styles", () => {
+  const dates = parseReleaseDates(`
+## v2.0.0 — 2026-08-18
+## [1.9.0] - 2026-08-11
+## v1.8.0 (2026-08-04)
+## v1.7.0
+`);
+  assert.deepEqual(dates, {
+    "2.0.0": "2026-08-18",
+    "1.9.0": "2026-08-11",
+    "1.8.0": "2026-08-04",
+  });
 });
 
 test("does not treat IDs inside work-item annotations as additional links", () => {
