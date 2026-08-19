@@ -155,6 +155,27 @@ function validateManifestShape(manifest, modelVersion = manifest?.model_version)
       if (!hasValue(manifest, field)) missing.push(field);
     }
   }
+  if (modelVersion >= 5) {
+    const stageNames = ["branch", "commit", "push", "merge", "pull_request", "tag"];
+    for (const stage of stageNames) {
+      const field = `vcs.stages.${stage}`;
+      if (!hasValue(manifest, field)) {
+        missing.push(field);
+      } else if (!["none", "agent", "human"].includes(getValue(manifest, field))) {
+        missing.push(`${field} must be none, agent, or human`);
+      }
+    }
+    if (!hasValue(manifest, "vcs.delete_branch")) {
+      missing.push("vcs.delete_branch");
+    } else if (!["after-merge", "never"].includes(manifest.vcs.delete_branch)) {
+      missing.push("vcs.delete_branch must be after-merge or never");
+    }
+    if (hasValue(manifest, "vcs.owner")) missing.push("vcs.owner is not valid in model_version 5");
+    if (hasValue(manifest, "vcs.branching")) missing.push("vcs.branching is not valid in model_version 5");
+    if (!["agent", "human"].includes(manifest.version?.owner)) {
+      missing.push("version.owner must be agent or human in model_version 5");
+    }
+  }
   for (const [index, agent] of (manifest.agents || []).entries()) {
     if (!Object.prototype.hasOwnProperty.call(agent, "excludes")) missing.push(`agents[${index}].excludes`);
   }

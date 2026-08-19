@@ -134,6 +134,16 @@ const FINDING_GUIDANCE = {
     meaning: "The changelog path declared by project.yml does not exist, so releases and pruning have no durable narrative record to verify against.",
     recommended_action: "Create the configured changelog file, or correct paths.changelog in project.yml to the existing file before running release or prune commands.",
   }),
+  VERSION_FILE_REQUIRED: () => ({
+    action_type: "fix",
+    meaning: "This release configuration does not create a version tag, so a file is required to hold the durable version of record.",
+    recommended_action: "Set version.file in project.yml to the package, project, or VERSION file that stores the release number, then run /work-init --upgrade or validation again.",
+  }),
+  INVALID_VCS_STAGE_CONFIGURATION: () => ({
+    action_type: "fix",
+    meaning: "The per-stage release plan is internally inconsistent, so the plugin cannot execute or hand off the configured VCS workflow safely.",
+    recommended_action: "Review vcs.stages in project.yml and correct the stages named below. Run /work-init --upgrade if this manifest was migrated from an older model.",
+  }),
   PRUNING_HYGIENE: () => ({
     action_type: "maintenance",
     meaning: "Old completed records are still valid, but they are making the live work files larger and harder to scan. No immediate correctness fix is required.",
@@ -289,6 +299,34 @@ function releaseNumbers(values) {
     .filter(Boolean);
 }
 
+function validateVcsStages(findings, manifest) {
+  if (manifest.model_version < 5) return;
+  const stages = manifest.vcs.stages;
+  const owner = { entity_type: "manifest", entity_id: "vcs.stages" };
+  const report = (message) => findings.push(finding(
+    "error",
+    "INVALID_VCS_STAGE_CONFIGURATION",
+    "Correct the VCS release stages",
+    message,
+    owner,
+  ));
+  const active = (stage) => stages[stage] !== "none";
+
+  if (manifest.vcs.system === "none") {
+    const configured = Object.entries(stages).filter(([, value]) => value !== "none").map(([stage]) => stage);
+    if (configured.length) report(`vcs.system is none, but these stages are active: ${configured.join(", ")}.`);
+    return;
+  }
+  if (stages.commit === "none") report("commit may not be none when vcs.system is git.");
+  if (stages.commit === "human") {
+    const laterAgentStages = ["push", "merge", "pull_request", "tag"].filter((stage) => stages[stage] === "agent");
+    if (laterAgentStages.length) report(`commit is human, so later stages may only be human or none; found agent on ${laterAgentStages.join(", ")}.`);
+  }
+  if (active("merge") && active("pull_request")) report("merge and pull_request may not both be active.");
+  if ((active("merge") || active("pull_request")) && !active("branch")) report("merge or pull_request requires an active branch stage.");
+  if (active("pull_request") && !active("push")) report("pull_request requires an active push stage.");
+}
+
 function semverTuple(value) {
   const match = String(value).match(/^v?(\d+)\.(\d+)\.(\d+)$/);
   return match ? match.slice(1).map(Number) : null;
@@ -391,8 +429,11 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     if (selected.source && live.source_request && selected.source !== live.source_request) findings.push(finding("error", "RELEASE_SOURCE_DRIFT", "Active-release source differs from backlog", `${selected.id}: ${selected.source} / ${live.source_request}`, { entity_type: "work", entity_id: selected.id }));
   }
 
+  validateVcsStages(findings, manifest);
   if (manifest.vcs.system === "git" && !(await exists(path.join(config.vcsRoot, ".git")))) findings.push(finding("warning", "VCS_MISMATCH", "Review the Git repository mismatch", config.vcsRoot, { entity_type: "manifest", entity_id: "vcs.system" }));
-  if (manifest.vcs.system === "none" && !manifest.version.file) findings.push(finding("error", "VERSION_FILE_REQUIRED", "A non-Git project requires version.file", "There is no tag to hold the version.", { entity_type: "manifest", entity_id: "version.file" }));
+  const hasNoVersionTag = manifest.vcs.system === "none"
+    || (manifest.model_version >= 5 && manifest.vcs.stages.tag === "none");
+  if (hasNoVersionTag && !manifest.version.file) findings.push(finding("error", "VERSION_FILE_REQUIRED", "Configure a file to hold the release version", "There is no tag stage to hold the version.", { entity_type: "manifest", entity_id: "version.file" }));
   if (config.files.changelog && !(await exists(config.files.changelog))) findings.push(finding("warning", "MISSING_CHANGELOG", "Create or correct the configured changelog", config.files.changelog, { entity_type: "manifest", entity_id: "paths.changelog" }));
   await validatePathsAndOwnership(findings, config);
 

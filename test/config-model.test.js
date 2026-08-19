@@ -3,12 +3,27 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const YAML = require("yaml");
 const { ConfigurationError, discoverManifest, loadProjectConfiguration } = require("../src/config");
 const { buildHealth, calculateWidgets, createFinding, linkModel } = require("../src/model");
 const { parseActiveRelease, parseBacklog, parseCompletionValues, parseRequests } = require("../src/parsers");
 const { getData, usage } = require("../server");
 
 const fixtureRoot = path.join(__dirname, "fixtures", "custom-project");
+
+function manifestSourceForVersion(source, modelVersion) {
+  const manifest = YAML.parse(source);
+  manifest.model_version = modelVersion;
+  if (modelVersion < 5) {
+    manifest.vcs = { system: manifest.vcs.system, owner: null, branching: null };
+    manifest.version.owner = "command";
+  }
+  if (modelVersion < 4) {
+    delete manifest.scope;
+    delete manifest.version.tag_template;
+  }
+  return YAML.stringify(manifest);
+}
 
 test("discovers the conventional docs/work manifest from a nested directory", async (context) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-discovery-"));
@@ -32,11 +47,11 @@ test("resolves model v4 monorepo paths from the project boundary", async (contex
   // Worktrees expose `.git` as a file, which is still a valid repository boundary.
   await fs.writeFile(path.join(repositoryRoot, ".git"), "gitdir: /tmp/example\n");
   const fixtureManifest = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
-  const scopedManifest = fixtureManifest
-    .replace("root: null", "root: apps/tool-a")
-    .replace("system: none", "system: git")
-    .replace("changelog: CHANGELOG.md", "changelog: /CHANGELOG.md");
-  await fs.writeFile(manifestFile, scopedManifest);
+  const scopedManifest = YAML.parse(manifestSourceForVersion(fixtureManifest, 4));
+  scopedManifest.scope.root = "apps/tool-a";
+  scopedManifest.vcs = { system: "git", owner: "command", branching: "branch" };
+  scopedManifest.paths.changelog = "/CHANGELOG.md";
+  await fs.writeFile(manifestFile, YAML.stringify(scopedManifest));
 
   const config = await loadProjectConfiguration(nested);
   assert.equal(config.manifestFile, manifestFile);
@@ -60,11 +75,7 @@ test("continues to load a conforming model v3 manifest", async (context) => {
   context.after(() => fs.rm(root, { recursive: true, force: true }));
   const manifest = path.join(root, "project.yml");
   const source = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
-  const versionThreeSource = source
-    .replace("model_version: 4", "model_version: 3")
-    .replace(/scope:\n  root: null\n  writes_outside: \[\]\n  agents_dir: project\n/, "")
-    .replace("  tag_template: null\n", "");
-  await fs.writeFile(manifest, versionThreeSource);
+  await fs.writeFile(manifest, manifestSourceForVersion(source, 3));
 
   const config = await loadProjectConfiguration(manifest);
   assert.equal(config.manifest.model_version, 3);
@@ -77,13 +88,67 @@ test("rejects a model v4 manifest that omits its new compatibility fields", asyn
   context.after(() => fs.rm(root, { recursive: true, force: true }));
   const manifest = path.join(root, "project.yml");
   const source = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
-  await fs.writeFile(manifest, source.replace("  tag_template: null\n", ""));
+  const versionFour = YAML.parse(manifestSourceForVersion(source, 4));
+  delete versionFour.version.tag_template;
+  await fs.writeFile(manifest, YAML.stringify(versionFour));
   await assert.rejects(
     () => loadProjectConfiguration(manifest),
     (error) => error instanceof ConfigurationError
       && error.code === "INVALID_MANIFEST_SHAPE"
       && error.details.includes("version.tag_template"),
   );
+});
+
+test("loads model v5 release stages and rejects incomplete stage maps", async (context) => {
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  assert.equal(config.manifest.model_version, 5);
+  assert.deepEqual(Object.keys(config.manifest.vcs.stages), ["branch", "commit", "push", "merge", "pull_request", "tag"]);
+  assert.equal(config.manifest.vcs.delete_branch, "after-merge");
+  assert.equal(config.manifest.version.owner, "agent");
+
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-v5-shape-"));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const manifestFile = path.join(root, "project.yml");
+  const invalid = structuredClone(config.manifest);
+  delete invalid.vcs.stages.pull_request;
+  await fs.writeFile(manifestFile, YAML.stringify(invalid));
+  await assert.rejects(
+    () => loadProjectConfiguration(manifestFile),
+    (error) => error instanceof ConfigurationError
+      && error.code === "INVALID_MANIFEST_SHAPE"
+      && error.details.includes("vcs.stages.pull_request"),
+  );
+});
+
+test("reports invalid model v5 stage combinations and a missing version file", async () => {
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  config.manifest.vcs = {
+    system: "git",
+    stages: {
+      branch: "none",
+      commit: "none",
+      push: "none",
+      merge: "agent",
+      pull_request: "agent",
+      tag: "none",
+    },
+    delete_branch: "after-merge",
+  };
+  config.manifest.version.file = null;
+  const [requestSource, backlogSource, releaseSource] = await Promise.all([
+    fs.readFile(config.files.requests, "utf8"),
+    fs.readFile(config.files.backlog, "utf8"),
+    fs.readFile(config.files.activeRelease, "utf8"),
+  ]);
+  const requestDocument = parseRequests(requestSource, config.ids);
+  const backlogDocument = parseBacklog(backlogSource, config.ids);
+  const activeRelease = parseActiveRelease(releaseSource, config.ids);
+  const linked = linkModel(requestDocument.items, backlogDocument.items);
+  const health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+
+  assert.ok(health.findings.some((finding) => finding.code === "INVALID_VCS_STAGE_CONFIGURATION" && /commit may not be none/.test(finding.message)));
+  assert.ok(health.findings.some((finding) => finding.code === "INVALID_VCS_STAGE_CONFIGURATION" && /may not both be active/.test(finding.message)));
+  assert.ok(health.findings.some((finding) => finding.code === "VERSION_FILE_REQUIRED"));
 });
 
 test("links both directions and validates a conforming fixture", async () => {

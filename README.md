@@ -20,7 +20,7 @@ and migrations remain the plugin's responsibility.
 ## Requirements
 
 - Node.js 20 or newer
-- A work-management manifest using `model_version: 3` or `model_version: 4`
+- A work-management manifest using `model_version: 3`, `model_version: 4`, or `model_version: 5`
 
 ## Quick start
 
@@ -97,12 +97,12 @@ Discovery stops at the Git repository root when one exists. No conventional work
 used after discovery: `paths.work`, `paths.spikes`, `paths.changelog`, both ID prefixes, taxonomy,
 and the agent roster all come from the manifest.
 
-In a version 4 manifest, `scope.root` selects a monorepo member's project boundary. Relative
+In a version 4 or 5 manifest, `scope.root` selects a monorepo member's project boundary. Relative
 manifest paths resolve from that project root; paths beginning with `/` resolve from the VCS root,
 matching the plugin's model. Project metric history and filesystem watching remain scoped to the
 selected member rather than its siblings.
 
-The viewer supports manifest schema versions 3 and 4. Other, missing, or shape-incompatible
+The viewer supports manifest schema versions 3, 4, and 5. Other, missing, or shape-incompatible
 manifests produce a clear startup error. They are never auto-migrated.
 
 ## Metric history
@@ -158,10 +158,10 @@ change events, local HTTP protections, and per-project metric-history isolation.
 ## Compatibility contract
 
 This codebase was last verified against
-[Work Management Claude Plugin v1.3.0](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.3.0)
-and its `model_version: 4` manifest on 18 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
-`src/constants.js`; the viewer deliberately retains version 3 compatibility and fails closed on
-any unlisted version rather than rendering plausible but incorrect data.
+[Work Management Claude Plugin v1.4.1](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.4.1)
+and its `model_version: 5` manifest on 19 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
+`src/constants.js`; the viewer deliberately retains versions 3 and 4 compatibility and fails
+closed on any unlisted version rather than rendering plausible but incorrect data.
 
 Before every viewer release:
 

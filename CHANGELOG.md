@@ -5,6 +5,19 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-19
+
+### Added
+
+- Support Work Management Claude Plugin v1.4.1 and its `model_version: 5` manifest while retaining
+  model versions 3 and 4, including validation of per-stage VCS ownership and branch cleanup.
+
+### Changed
+
+- Require `version.file` whenever a model v5 project disables its tag stage, so Health reflects
+  the current plugin's durable-version rule.
+- Record plugin v1.4.1 as the compatibility baseline for future release audits.
+
 ## [0.8.0] - 2026-08-18
 
 ### Added

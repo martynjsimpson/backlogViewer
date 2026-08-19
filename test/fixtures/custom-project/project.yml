@@ -1,4 +1,4 @@
-model_version: 4
+model_version: 5
 project:
   name: Fixture Project
   description: Test fixture for custom work-management identifiers
@@ -24,11 +24,17 @@ taxonomy:
   priorities: [high, low]
 vcs:
   system: none
-  owner: null
-  branching: null
+  stages:
+    branch: none
+    commit: none
+    push: none
+    merge: none
+    pull_request: none
+    tag: none
+  delete_branch: after-merge
 version:
   scheme: semver-v
-  owner: command
+  owner: agent
   file: VERSION
   mirrors: []
   tag_template: null
