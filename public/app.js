@@ -19,6 +19,7 @@ const state = {
 
 const byId = (id) => document.getElementById(id);
 const elements = {
+  viewerVersion: byId("viewerVersion"),
   projectTitle: byId("projectTitle"),
   projectDescription: byId("projectDescription"),
   loadedAt: byId("loadedAt"),
@@ -1281,6 +1282,7 @@ function updateModel(payload, source) {
   const changed = signature !== currentDataSignature;
   currentDataSignature = signature;
   state.data = payload;
+  elements.viewerVersion.textContent = `v${payload.viewer.version}`;
   elements.projectTitle.textContent = payload.project.name;
   elements.projectDescription.textContent = payload.project.description;
   document.title = `${payload.project.name} · Work Management Viewer`;

@@ -21,6 +21,11 @@ test("uses the project-wide Dashboard as the default view", () => {
   assert.match(script, /release_dates: payload\.release_dates/);
 });
 
+test("shows the package-backed viewer version in the header", () => {
+  assert.match(html, /Work Management Viewer - <span id="viewerVersion">v…<\/span>/);
+  assert.match(script, /viewerVersion\.textContent = `v\$\{payload\.viewer\.version\}`/);
+});
+
 test("keeps filter-aware summaries on each record view", () => {
   for (const id of [
     "requestFilteredTotal",

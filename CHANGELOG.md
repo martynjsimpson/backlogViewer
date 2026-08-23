@@ -5,6 +5,13 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-08-23
+
+### Added
+
+- Show the running Work Management Viewer package version in the application header, sourced from
+  the server's package metadata so future version bumps appear automatically.
+
 ## [0.10.0] - 2026-08-23
 
 ### Added

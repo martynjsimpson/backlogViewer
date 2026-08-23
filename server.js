@@ -8,6 +8,7 @@ const { ConfigurationError, loadProjectConfiguration } = require("./src/config")
 const { updateWidgetHistory } = require("./src/history");
 const { buildHealth, calculateWidgets, createSummaries, linkModel } = require("./src/model");
 const { parseActiveRelease, parseBacklog, parseReleaseDates, parseRequests } = require("./src/parsers");
+const { version: viewerVersion } = require("./package.json");
 
 const publicDir = path.join(__dirname, "public");
 const allowedHostnames = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -196,6 +197,9 @@ async function getData(config) {
   const widgetHistory = await updateWidgetHistory(config.root, widgets);
   return {
     generated_at: new Date().toISOString(),
+    viewer: {
+      version: viewerVersion,
+    },
     project: {
       name: config.manifest.project.name,
       description: config.manifest.project.description,

@@ -218,6 +218,7 @@ test("builds the complete API model from a project manifest", async (context) =>
   assert.deepEqual(data.release_dates, { "1.2.3": "2025-04-06" });
   assert.deepEqual(data.health.summary, { errors: 0, warnings: 0, recommendations: 0, total: 0 });
   assert.equal(data.widgets.healthErrors, 0);
+  assert.equal(data.viewer.version, require("../package.json").version);
   assert.match(data.widget_history.state_file, /[a-f0-9]{16}\.json$/);
 });
 
