@@ -168,6 +168,42 @@ test("links both directions and validates a conforming fixture", async () => {
   assert.equal(calculateWidgets(linked.requests, linked.backlog, activeRelease, health).activeReleaseRequests, 1);
 });
 
+test("links a selected legacy release ID and reports an unresolved ID", async () => {
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  const [requestSource, backlogSource] = await Promise.all([
+    fs.readFile(config.files.requests, "utf8"),
+    fs.readFile(config.files.backlog, "utf8"),
+  ]);
+  const requestDocument = parseRequests(requestSource, config.ids);
+  const backlogDocument = parseBacklog(backlogSource, config.ids);
+  backlogDocument.items.push({
+    ...backlogDocument.items[0],
+    id: "BUG-058",
+    title: "Legacy fixture item",
+    source_block: "id: BUG-058",
+  });
+  const activeRelease = parseActiveRelease(`
+# Active Release
+
+Status: approved
+
+## Selected work items
+
+### BUG-058 — Legacy fixture item
+Source: ASK-0001 | Type: bug | Priority: high | Status: ready
+
+### UNKNOWN-999 — Missing fixture item
+Status: ready
+`, config.ids);
+  const linked = linkModel(requestDocument.items, backlogDocument.items);
+  const health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+
+  assert.equal(activeRelease.work_items[0].live_item.id, "BUG-058");
+  assert.ok(health.findings.some((finding) => (
+    finding.code === "MISSING_RELEASE_ITEM" && finding.entity_id === "UNKNOWN-999"
+  )));
+});
+
 test("requires request completion only when derived work shipped in a release", async () => {
   const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
   const [requestSource, backlogSource, releaseSource] = await Promise.all([

@@ -70,6 +70,34 @@ test("parses hyphen release headings and pipe-delimited item fields", async () =
   assert.equal(release.work_items[0].status, "ready");
 });
 
+test("parses mixed legacy and current release IDs only from selected work items", () => {
+  const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
+  const release = parseActiveRelease(`
+# Active Release
+
+Status: approved
+
+## Selected work items
+
+### BUG-058 — Preserve a legacy ID
+Source: ASK-0001 | Type: bug | Priority: high | Status: ready
+
+### TASK-0003 - Use the current ID format
+Source: ASK-0002 | Type: feature | Priority: medium | Status: ready
+
+### UNKNOWN-999 — Retain an unresolved ID for health reporting
+Status: ready
+
+## Decisions
+
+### TASK-0004 — This is a subsection, not a selected item
+`, ids);
+
+  assert.deepEqual(release.work_items.map((item) => item.id), ["BUG-058", "TASK-0003", "UNKNOWN-999"]);
+  assert.deepEqual(release.request_ids, ["ASK-0001", "ASK-0002"]);
+  assert.match(release.section_text.decisions, /TASK-0004/);
+});
+
 test("classifies annotated releases and invalid legacy prose", () => {
   const ids = { workPrefix: "TASK" };
   const values = parseCompletionValues("v1.2.3 (partial), spike completed yesterday", ids);

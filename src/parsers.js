@@ -224,7 +224,9 @@ function parseActiveRelease(markdown, ids) {
       continue;
     }
 
-    const itemMatch = line.match(new RegExp(`^###\\s+(${ids.workPrefix}-\\d+[A-Z]?)\\s+[-–—]\\s+(.+)$`, "i"));
+    const itemMatch = currentSection === "selected_work_items"
+      ? line.match(/^###\s+(\S+)\s+[-–—]\s+(.+)$/)
+      : null;
     if (itemMatch) {
       currentItem = { id: itemMatch[1].toUpperCase(), title: itemMatch[2].trim(), description_lines: [] };
       release.work_items.push(currentItem);
