@@ -24,27 +24,70 @@ and migrations remain the plugin's responsibility.
 
 ## Quick start
 
+Clone the viewer and install its dependency once:
+
 ```sh
 git clone https://github.com/martynjsimpson/backlogViewer.git
 cd backlogViewer
 npm ci
-npm start -- --project /path/to/project
 ```
 
-Open `http://127.0.0.1:5177`.
+Then choose either way of running it.
+
+### Option 1: run `work-management-viewer` from a target project
+
+From the `backlogViewer` repository, create a global command linked to this checkout:
+
+```sh
+npm link
+```
+
+`npm link` is the step that makes the `work-management-viewer` executable available outside the
+viewer repository. The link uses the `bin` entry in `package.json` and continues to point at this
+checkout, so pulling viewer updates does not require linking it again.
+
+Now change to any target project containing a compatible work-management manifest and run the
+command without a project argument:
+
+```sh
+cd /path/to/target-project
+work-management-viewer
+```
+
+The viewer discovers the target project's manifest from the current directory. Confirm the link
+from any directory with:
+
+```sh
+work-management-viewer --help
+```
+
+If the shell reports `command not found` after `npm link`, make sure npm's global executable
+location is on `PATH`. Run `npm prefix -g` to find the global prefix; its `bin` directory contains
+global commands on macOS and Linux, while the prefix itself contains them on Windows. Restart the
+terminal after changing `PATH`. Moving or deleting the linked `backlogViewer` checkout will break
+the command; run `npm link` again from its new location.
+
+### Option 2: run from the viewer repository and pass the target path
+
+Stay in (or return to) the `backlogViewer` repository and pass the target project explicitly:
+
+```sh
+cd /path/to/backlogViewer
+npm start -- --project /path/to/target-project
+```
+
+The first `--` belongs to npm: it forwards the remaining arguments to the viewer. `--project`
+accepts either a project directory or the exact path to its `project.yml`; relative paths resolve
+from the `backlogViewer` directory in this example.
+
+Whichever option you use, open `http://127.0.0.1:5177`.
 
 Use a different port when needed:
 
 ```sh
-npm start -- --project /path/to/project --port 5178
-```
-
-`--project` accepts a project directory or the exact path to `project.yml`. Relative paths resolve
-from the caller's current working directory. If the package is published to npm, the equivalent
-command will be:
-
-```sh
-npx work-management-viewer --project /path/to/project
+work-management-viewer --port 5178
+# or, from the viewer repository:
+npm start -- --project /path/to/target-project --port 5178
 ```
 
 ## What it shows
