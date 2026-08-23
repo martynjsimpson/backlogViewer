@@ -5,6 +5,15 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-23
+
+### Fixed
+
+- Render selected Active Release work items with intentional legacy IDs by resolving their exact
+  identifiers against the backlog instead of requiring the manifest's current work-item prefix.
+- Preserve unresolved selected IDs for `MISSING_RELEASE_ITEM` Health reporting, while limiting
+  work-item heading detection to the Selected work items section.
+
 ## [0.10.1] - 2026-08-23
 
 ### Added
