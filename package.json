@@ -1,6 +1,6 @@
 {
   "name": "work-management-viewer",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Local dashboard and conformance checker for the manifest-driven work-management model.",
   "license": "MIT",
   "repository": {

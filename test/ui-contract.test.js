@@ -39,3 +39,10 @@ test("keeps filter-aware summaries on each record view", () => {
 
   assert.match(html, /Filters affect records and the summary cards on this page\./);
 });
+
+test("offers a filter-aware YAML export from the Health view", () => {
+  assert.match(html, /id="exportHealthButton"[^>]*disabled>Export shown \(\.yml\)<\/button>/);
+  assert.match(html, /<script src="\/health-export\.js"><\/script>\s*<script src="\/app\.js"><\/script>/);
+  assert.match(script, /const findings = filteredHealthFindings\(\)/);
+  assert.match(script, /exportHealthButton\.addEventListener\("click", exportShownHealthFindings\)/);
+});

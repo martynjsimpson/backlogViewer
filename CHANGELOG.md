@@ -5,6 +5,19 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-23
+
+### Added
+
+- Export exactly the Health findings selected by the current severity and code filters as a
+  self-describing YAML file, including complete remediation guidance and project/source metadata
+  for AI-assisted fixes.
+
+### Changed
+
+- Re-verify compatibility with the current Work Management Claude Plugin v1.4.1 manifest,
+  work-file templates, and model documentation on 23 August 2026.
+
 ## [0.9.0] - 2026-08-19
 
 ### Added

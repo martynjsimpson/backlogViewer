@@ -94,6 +94,7 @@ const elements = {
   healthCodeFilterMenu: byId("healthCodeFilterMenu"),
   resetHealthFiltersButton: byId("resetHealthFiltersButton"),
   healthFindingCount: byId("healthFindingCount"),
+  exportHealthButton: byId("exportHealthButton"),
   healthList: byId("healthList"),
   healthNavCount: byId("healthNavCount"),
   detailsModal: byId("detailsModal"),
@@ -1014,11 +1015,12 @@ function renderHealth() {
     elements.healthFilters.append(button);
   }
   elements.healthList.replaceChildren();
-  const findings = health.findings.filter((entry) =>
-    state.healthSeverities.has(entry.severity)
-    && (!state.healthCodes.size || state.healthCodes.has(entry.code))
-  );
+  const findings = filteredHealthFindings();
   elements.healthFindingCount.textContent = `${findings.length} shown of ${health.findings.length}`;
+  elements.exportHealthButton.disabled = findings.length === 0;
+  elements.exportHealthButton.title = findings.length
+    ? `Export ${countLabel(findings.length, "shown finding")} as YAML`
+    : "There are no shown findings to export";
   if (!findings.length) elements.healthList.append(emptyNode(health.summary.total ? "No findings match the current Health filters." : "No conformance findings."));
   for (const item of findings) {
     const card = document.createElement("article");
@@ -1062,6 +1064,33 @@ function renderHealth() {
     card.append(top, meaning, message, nextStep, tags);
     elements.healthList.append(makeClickableCard(card, item, "health"));
   }
+}
+
+function filteredHealthFindings() {
+  return HealthExport.filterHealthFindings(
+    state.data.health.findings,
+    state.healthSeverities,
+    state.healthCodes,
+  );
+}
+
+function exportShownHealthFindings() {
+  const findings = filteredHealthFindings();
+  if (!findings.length) return;
+  const generatedAt = new Date().toISOString();
+  const yaml = HealthExport.stringifyHealthExport(state.data, findings, {
+    severities: state.healthSeverities,
+    codes: state.healthCodes,
+  }, generatedAt);
+  const downloadUrl = URL.createObjectURL(new Blob([yaml], { type: "application/yaml;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = HealthExport.exportFilename(state.data.project.name, generatedAt);
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
 }
 
 function setPage(page) {
@@ -1434,6 +1463,7 @@ elements.resetHealthFiltersButton.addEventListener("click", () => {
   closeFilters();
   renderAndSync();
 });
+elements.exportHealthButton.addEventListener("click", exportShownHealthFindings);
 elements.moreChartsLink.addEventListener("click", () => {
   closeFilters();
   setPage("charts");

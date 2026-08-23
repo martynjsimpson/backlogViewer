@@ -56,13 +56,18 @@ npx work-management-viewer --project /path/to/project
 - **Links** — filtered link-health totals and request-to-work relationships, including missing and
   intentionally empty links.
 - **Active release** — scope, status, decisions, agents, blockers, and verification information.
-- **Health** — actionable errors, warnings, and recommendations for model conformance.
+- **Health** — actionable errors, warnings, and recommendations for model conformance, with a
+  filter-aware YAML export for handing the shown findings to an AI agent.
 - **More Charts** — project-wide request, work-item, capability, priority, and delivered-release
   breakdowns.
 
 Filter and navigation state is encoded in the URL, so filtered views can be bookmarked and browser
 history behaves normally. Search accepts text and qualified terms such as `status:blocked`,
 `type:spike`, `agent:frontend-developer`, and `capability:imports`.
+
+The Health export contains only the findings selected by the current severity and code filters. It
+includes the complete, untruncated guidance plus project, source-file, filter, and model-generation
+metadata so another agent can identify and repair the affected records.
 
 Dashboard totals and charts always represent the whole project. Selecting a chart row opens the
 relevant filtered record view, where the filter bar and its three summary metrics work together.
@@ -159,7 +164,7 @@ change events, local HTTP protections, and per-project metric-history isolation.
 
 This codebase was last verified against
 [Work Management Claude Plugin v1.4.1](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.4.1)
-and its `model_version: 5` manifest on 19 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
+and its `model_version: 5` manifest on 23 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
 `src/constants.js`; the viewer deliberately retains versions 3 and 4 compatibility and fails
 closed on any unlisted version rather than rendering plausible but incorrect data.
 
