@@ -15,7 +15,11 @@ test("parses custom prefixes, work links, and multiple completion values", async
   const done = document.items.find((request) => request.id === "ASK-0001");
   assert.deepEqual(done.work_items, ["TASK-0001", "TASK-0002"]);
   assert.deepEqual(done.done_in.map((entry) => [entry.kind, entry.value]), [["release", "v1.2.3"], ["spike", "TASK-0002"]]);
-  assert.equal(document.items.find((request) => request.id === "ASK-0002").summary, "This summary includes a sentence with Word: value and must stay intact.");
+  const blocked = document.items.find((request) => request.id === "ASK-0002");
+  assert.equal(blocked.summary, "This summary includes a sentence with Word: value and must stay intact.");
+  assert.equal(blocked.parked_since, "v1.2.2");
+  assert.equal(blocked.reviewed, "2 — last v1.2.3, still waiting on the vendor");
+  assert.deepEqual(blocked.unknown_fields, []);
 });
 
 test("ignores request-shaped examples inside Markdown fences", () => {
@@ -57,6 +61,27 @@ test("uses YAML semantics for folded and literal block scalars", async () => {
   const document = parseBacklog(source, config.ids);
   assert.equal(document.items[0].summary, "Fold this text without leaking the YAML scalar indicator.");
   assert.equal(document.items[1].summary, "Preserve this first line.\nPreserve this second line.\n");
+  assert.equal(document.items[2].source_request, "");
+  assert.equal(document.items[2].source_release, "v1.2.2");
+});
+
+test("normalises request and release work-item provenance", () => {
+  const ids = { workPrefix: "TASK" };
+  const document = parseBacklog(`
+model_version: 1
+items:
+  - id: task-0001
+    source_request: ask-0001
+    source_release: null
+  - id: task-0002
+    source_request: null
+    source_release: v1.2.3
+`, ids);
+
+  assert.equal(document.items[0].source_request, "ASK-0001");
+  assert.equal(document.items[0].source_release, "");
+  assert.equal(document.items[1].source_request, "");
+  assert.equal(document.items[1].source_release, "v1.2.3");
 });
 
 test("parses hyphen release headings and pipe-delimited item fields", async () => {
@@ -96,6 +121,23 @@ Status: ready
   assert.deepEqual(release.work_items.map((item) => item.id), ["BUG-058", "TASK-0003", "UNKNOWN-999"]);
   assert.deepEqual(release.request_ids, ["ASK-0001", "ASK-0002"]);
   assert.match(release.section_text.decisions, /TASK-0004/);
+});
+
+test("keeps release provenance out of the active request count", () => {
+  const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
+  const release = parseActiveRelease(`
+# Active Release
+
+Status: approved
+
+## Selected work items
+
+### TASK-0003 — Release-sourced upkeep
+Source: v1.2.3 | Type: maintenance | Priority: medium | Status: ready
+`, ids);
+
+  assert.equal(release.work_items[0].source, "v1.2.3");
+  assert.deepEqual(release.request_ids, []);
 });
 
 test("classifies annotated releases and invalid legacy prose", () => {

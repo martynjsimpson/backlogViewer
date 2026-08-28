@@ -58,6 +58,8 @@ const REQUEST_FIELDS = new Map([
   ["source", "source"],
   ["done in", "done_in_raw"],
   ["blocked on", "blocked_on"],
+  ["parked since", "parked_since"],
+  ["reviewed", "reviewed"],
 ]);
 
 module.exports = {

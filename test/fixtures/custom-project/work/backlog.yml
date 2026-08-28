@@ -2,6 +2,7 @@ model_version: 1
 items:
   - id: TASK-0001
     source_request: ASK-0001
+    source_release: null
     title: Implement the fixture
     type: feature
     capability: fixture
@@ -20,6 +21,7 @@ items:
     done_in: []
   - id: TASK-0002
     source_request: ASK-0001
+    source_release: null
     title: Investigate the fixture
     type: spike
     capability: fixture
@@ -37,3 +39,20 @@ items:
     evidence: fixture
     done_in:
       - "SPIKE: TASK-0002"
+  - id: TASK-0003
+    source_request: null
+    source_release: v1.2.2
+    title: Maintain the fixture
+    type: feature
+    capability: fixture
+    status: ready
+    priority: low
+    confidence: high
+    summary: Keep the fixture aligned with release findings.
+    acceptance:
+      - The release-sourced work is visible without a request link.
+    remaining: Implement it.
+    dependencies: []
+    suggested_agents: [implementer]
+    evidence: Fixture release v1.2.2
+    done_in: []

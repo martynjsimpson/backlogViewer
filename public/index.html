@@ -33,7 +33,7 @@
 
     <main>
       <nav class="primary-tabs" aria-label="Viewer sections">
-        <button class="primary-tab is-active" data-view="dashboard" type="button">Dashboard</button>
+        <button class="primary-tab is-active" data-view="dashboard" type="button" aria-current="page">Dashboard</button>
         <button class="primary-tab" data-view="requests" type="button">Requests</button>
         <button class="primary-tab" data-view="backlog" type="button">Work items</button>
         <button class="primary-tab" data-view="links" type="button">Links</button>
@@ -88,7 +88,7 @@
             <strong id="backlogTotal">0</strong>
             <span id="backlogItemsTrend" class="trend trend-flat" aria-label="No change">→</span>
           </div>
-          <span id="backlogActive">excluding done/duplicate</span>
+          <span id="backlogActive">excluding done</span>
           </article>
           <article class="metric">
           <span class="metric-label">Completed Work Items</span>
@@ -141,7 +141,7 @@
       </section>
 
       <section id="toolbar" class="toolbar is-hidden" aria-label="Filters">
-        <input id="searchInput" type="search" placeholder="Search, or use status:blocked agent:frontend-developer...">
+        <input id="searchInput" type="search" aria-label="Search records" placeholder="Search, or use status:blocked agent:frontend-developer...">
         <div id="statusFilter" class="multi-filter">
           <button id="statusFilterButton" class="multi-filter-button" type="button" aria-expanded="false" aria-controls="statusFilterMenu">
             <span id="statusFilterLabel">All statuses</span>

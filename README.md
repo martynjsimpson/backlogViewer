@@ -106,7 +106,7 @@ npm start -- --project /path/to/target-project --port 5178
 
 Filter and navigation state is encoded in the URL, so filtered views can be bookmarked and browser
 history behaves normally. Search accepts text and qualified terms such as `status:blocked`,
-`type:spike`, `agent:frontend-developer`, and `capability:imports`.
+`type:spike`, `agent:frontend-developer`, `capability:imports`, and `source:v1.2.3`.
 
 The Health export contains only the findings selected by the current severity and code filters. It
 includes the complete, untruncated guidance plus project, source-file, filter, and model-generation
@@ -206,8 +206,8 @@ change events, local HTTP protections, and per-project metric-history isolation.
 ## Compatibility contract
 
 This codebase was last verified against
-[Work Management Claude Plugin v1.4.1](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.4.1)
-and its `model_version: 5` manifest on 23 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
+[Work Management Claude Plugin v1.5.0](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.5.0)
+and its `model_version: 5` manifest on 28 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
 `src/constants.js`; the viewer deliberately retains versions 3 and 4 compatibility and fails
 closed on any unlisted version rather than rendering plausible but incorrect data.
 

@@ -6,7 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const { loadProjectConfiguration } = require("../src/config");
-const { createProjectChangeFeed, createServer, getArg, isAllowedHost, shouldIgnoreWatchPath } = require("../server");
+const { createProjectChangeFeed, createServer, getArg, isAllowedHost, shouldIgnoreWatchPath, validateArgs } = require("../server");
 
 const fixtureManifest = path.join(__dirname, "fixtures", "custom-project", "project.yml");
 
@@ -43,6 +43,12 @@ test("accepts only local Host headers", () => {
 test("rejects CLI options without values", () => {
   assert.throws(() => getArg(["--port"], "--port"), /Missing value for --port/);
   assert.throws(() => getArg(["--project", "--port", "5178"], "--project"), /Missing value for --project/);
+});
+
+test("rejects unknown CLI options instead of silently ignoring them", () => {
+  assert.doesNotThrow(() => validateArgs(["--project", "/tmp/example", "--port", "5178"]));
+  assert.throws(() => validateArgs(["--porrt", "5178"]), /Unknown option: --porrt/);
+  assert.throws(() => validateArgs(["unexpected-project"]), /Unknown option: unexpected-project/);
 });
 
 test("debounces project changes and ignores generated dependency paths", async () => {

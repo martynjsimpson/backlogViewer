@@ -355,8 +355,8 @@ function orderedEntries(item) {
       .filter((key) => Object.prototype.hasOwnProperty.call(item, key))
       .filter((key) => item[key] !== "" && item[key] != null);
   }
-  const preferred = ["id", "request_id", "source_request", "title", "type", "capability", "status", "priority", "confidence", "section", "summary", "notes", "blocked_on", "acceptance", "remaining", "dependencies", "suggested_agents", "backlog_items", "work_items", "done_in", "source", "source_block"];
-  const hidden = new Set(["live_item", "done_in_labels", "work_items_raw", "done_in_raw", "unknown_fields", "resolved_backlog_items", "unresolved_work_items", "source_requests", "has_request", "work_items_explicitly_none"]);
+  const preferred = ["id", "request_id", "source_request", "source_release", "title", "type", "capability", "status", "priority", "confidence", "section", "summary", "notes", "blocked_on", "parked_since", "reviewed", "acceptance", "remaining", "dependencies", "suggested_agents", "evidence", "backlog_items", "work_items", "done_in", "source", "source_block"];
+  const hidden = new Set(["live_item", "done_in_labels", "work_items_raw", "done_in_raw", "unknown_fields", "resolved_backlog_items", "unresolved_work_items", "source_requests", "source_kind", "has_request", "work_items_explicitly_none"]);
   return [...new Set([...preferred, ...Object.keys(item).sort()])]
     .filter((key) => !hidden.has(key) && Object.prototype.hasOwnProperty.call(item, key))
     .filter((key) => item[key] !== "" && item[key] != null);
@@ -544,6 +544,13 @@ function renderRequestCard(request) {
   return makeClickableCard(card, request, "request");
 }
 
+function workItemSourceLabel(item) {
+  if (item.source_request && item.source_release) return `conflicting: ${item.source_request} + ${item.source_release}`;
+  if (item.source_request) return item.source_request;
+  if (item.source_release) return `found in ${item.source_release}`;
+  return "legacy provenance";
+}
+
 function renderBacklogCard(item, releaseItem = null) {
   const card = document.createElement("article");
   card.className = "item-card";
@@ -557,7 +564,7 @@ function renderBacklogCard(item, releaseItem = null) {
   title.textContent = item.title || "Untitled work item";
   const meta = document.createElement("span");
   meta.className = "meta";
-  meta.textContent = item.source_request || "no request";
+  meta.textContent = workItemSourceLabel(item);
   top.append(id, title, meta);
   const summary = document.createElement("p");
   summary.className = "item-summary";
@@ -686,6 +693,7 @@ function parseSearch(query) {
 }
 
 function searchableValues(item, field) {
+  if (field === "source" && !item.request_id) return [normalise(item.source_request), normalise(item.source_release)];
   const aliases = {
     agent: "suggested_agents",
     request: item.request_id ? "id" : "source_request",
@@ -701,7 +709,7 @@ function matchesSearch(item) {
   const parsed = parseSearch(state.query);
   for (const term of parsed.qualified) if (!searchableValues(item, term.field).some((value) => value.includes(term.value))) return false;
   if (!parsed.text) return true;
-  const haystack = [item.id, item.title, item.summary, item.status, item.type, item.priority, item.capability, item.source_request, item.notes, item.blocked_on, ...(item.suggested_agents || [])].map(normalise).join(" ");
+  const haystack = [item.id, item.title, item.summary, item.status, item.type, item.priority, item.capability, item.source_request, item.source_release, item.evidence, item.notes, item.blocked_on, ...(item.suggested_agents || [])].map(normalise).join(" ");
   return haystack.includes(parsed.text);
 }
 
@@ -1106,7 +1114,12 @@ function setView(view, push = true) {
   if (state.page === "charts") setPage("viewer");
   state.view = ["dashboard", "requests", "backlog", "links", "release", "health"].includes(view) ? view : "dashboard";
   state.page = "viewer";
-  for (const button of document.querySelectorAll(".primary-tab")) button.classList.toggle("is-active", button.dataset.view === state.view);
+  for (const button of document.querySelectorAll(".primary-tab")) {
+    const active = button.dataset.view === state.view;
+    button.classList.toggle("is-active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
   elements.dashboardView.classList.toggle("is-hidden", state.view !== "dashboard");
   elements.requestsView.classList.toggle("is-hidden", state.view !== "requests");
   elements.backlogView.classList.toggle("is-hidden", state.view !== "backlog");
@@ -1232,7 +1245,13 @@ function render() {
   renderChart(elements.backlogPriorityChart, countBy(backlog, "priority"), { kind: "priority" });
   renderChart(elements.agentChart, countArrayValues(backlog, "suggested_agents"));
   renderChart(elements.backlogSourceCoverageChart, backlog.reduce((counts, item) => {
-    const key = item.has_request ? "Has matching request" : "No matching request";
+    const key = {
+      request: "Matching request",
+      release: "Release-sourced (no request)",
+      missing_request: "Missing request",
+      conflicting: "Conflicting provenance",
+      legacy: "Legacy provenance",
+    }[item.source_kind] || "Legacy provenance";
     counts[key] = (counts[key] || 0) + 1;
     return counts;
   }, {}));
@@ -1491,7 +1510,25 @@ for (const button of document.querySelectorAll(".primary-tab")) button.addEventL
 document.addEventListener("click", (event) => {
   if (![elements.statusFilter, elements.typeFilter, elements.healthCodeFilter].some((filter) => filter.contains(event.target))) closeFilters();
 });
-document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDetailsModal(); });
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeDetailsModal();
+    return;
+  }
+  if (event.key !== "Tab" || elements.detailsModal.classList.contains("is-hidden")) return;
+  const focusable = [...elements.detailsModal.querySelectorAll("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])")]
+    .filter((element) => !element.disabled && !element.hidden);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || !elements.detailsModal.contains(document.activeElement))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
 window.addEventListener("popstate", () => { loadUrlState(); if (state.data) render(); });
 document.addEventListener("visibilitychange", () => {
   if (state.livePaused) return;

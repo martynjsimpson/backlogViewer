@@ -177,6 +177,7 @@ function normaliseBacklogItem(item, ids) {
   }
   normalized.id = String(normalized.id || "").toUpperCase();
   normalized.source_request = normalized.source_request == null ? "" : String(normalized.source_request).toUpperCase();
+  normalized.source_release = normalized.source_release == null ? "" : String(normalized.source_release).trim();
   normalized.done_in = normalized.done_in.flatMap((value) => parseCompletionValues(value, ids));
   normalized.source_block = YAML.stringify(item, { lineWidth: 0 }).trim();
   return normalized;
@@ -262,7 +263,10 @@ function parseActiveRelease(markdown, ids) {
   for (const item of release.work_items) {
     item.description = item.description_lines.join(" ");
     delete item.description_lines;
-    if (item.source && ids.requestPattern.test(item.source)) release.request_ids.push(item.source.toUpperCase());
+    if (item.source && ids.requestPattern.test(item.source)) {
+      item.source = item.source.toUpperCase();
+      release.request_ids.push(item.source);
+    }
   }
   release.request_ids = [...new Set(release.request_ids)];
   release.section_text = Object.fromEntries(Object.entries(release.sections).map(([key, lines]) => [key, lines.join("\n").trim()]));

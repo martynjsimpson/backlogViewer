@@ -3,7 +3,35 @@
 All notable changes to Work Management Viewer are documented here. The format follows Keep a
 Changelog, and releases use semantic versioning.
 
-## [Unreleased]
+## [1.0.0] - 2026-08-28
+
+### Added
+
+- Support Work Management Claude Plugin v1.5.0 work-item provenance through the mutually exclusive
+  `source_request` and `source_release` fields, including version validation, legacy backfill
+  warnings, contradiction errors, and Active Release source-drift checks.
+- Accept the new structured `Parked since:` and `Reviewed:` request fields without reporting them
+  as unsupported.
+- Warn when a completed spike document uses legacy unnumbered recommendations instead of the
+  stable `R1`, `R2`, … identifiers required for close-out accounting.
+
+### Changed
+
+- Declare Work Management Viewer stable after a full compatibility, packaging, security,
+  accessibility, and interaction audit.
+- Distinguish request-derived, release-derived, unresolved, conflicting, and legacy work-item
+  provenance in source coverage, cards, details, and search.
+- Re-verify compatibility with Work Management Claude Plugin v1.5.0 and its unchanged
+  `model_version: 5` manifest and backlog `model_version: 1` on 28 August 2026.
+- Test both the documented Node.js 20 minimum and Node.js 24 in CI and before automated releases.
+
+### Fixed
+
+- Reject unknown CLI arguments so a misspelled option cannot silently start the viewer with a
+  default project or port.
+- Correct the active Work Items summary copy, keep structured evidence ahead of raw source in
+  detail dialogs, expose the current navigation page to assistive technology, and contain keyboard
+  focus inside an open dialog.
 
 ## [0.11.0] - 2026-08-23
 

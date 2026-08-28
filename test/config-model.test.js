@@ -168,6 +168,58 @@ test("links both directions and validates a conforming fixture", async () => {
   assert.equal(calculateWidgets(linked.requests, linked.backlog, activeRelease, health).activeReleaseRequests, 1);
 });
 
+test("classifies and validates v1.5 work-item provenance", async () => {
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  const [requestSource, backlogSource, releaseSource] = await Promise.all([
+    fs.readFile(config.files.requests, "utf8"),
+    fs.readFile(config.files.backlog, "utf8"),
+    fs.readFile(config.files.activeRelease, "utf8"),
+  ]);
+  const requestDocument = parseRequests(requestSource, config.ids);
+  const backlogDocument = parseBacklog(backlogSource, config.ids);
+  const activeRelease = parseActiveRelease(releaseSource, config.ids);
+  const base = backlogDocument.items[0];
+  backlogDocument.items.push(
+    { ...base, id: "TASK-0004", source_request: "ASK-0001", source_release: "v1.2.3", source_block: "id: TASK-0004" },
+    { ...base, id: "TASK-0005", source_request: "", source_release: "", source_block: "id: TASK-0005" },
+    { ...base, id: "TASK-0006", source_request: "", source_release: "last release", source_block: "id: TASK-0006" },
+  );
+  activeRelease.work_items.push({ id: "TASK-0003", source: "v1.2.3", status: "ready" });
+
+  const linked = linkModel(requestDocument.items, backlogDocument.items);
+  const health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+
+  assert.equal(linked.backlog.find((item) => item.id === "TASK-0003").source_kind, "release");
+  assert.equal(linked.backlog.find((item) => item.id === "TASK-0003").has_request, false);
+  assert.ok(health.findings.some((finding) => finding.code === "CONFLICTING_WORK_PROVENANCE" && finding.entity_id === "TASK-0004"));
+  assert.ok(health.findings.some((finding) => finding.code === "MISSING_WORK_PROVENANCE" && finding.entity_id === "TASK-0005" && finding.severity === "warning"));
+  assert.ok(health.findings.some((finding) => finding.code === "INVALID_SOURCE_RELEASE" && finding.entity_id === "TASK-0006"));
+  assert.ok(health.findings.some((finding) => finding.code === "RELEASE_SOURCE_DRIFT" && finding.entity_id === "TASK-0003" && /v1\.2\.3 \/ v1\.2\.2/.test(finding.message)));
+  assert.equal(health.findings.some((finding) => finding.code === "MISSING_SOURCE_REQUEST" && finding.entity_id === "TASK-0003"), false);
+});
+
+test("reports legacy unnumbered spike recommendations without invalidating the document", async (context) => {
+  const spikeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-spikes-"));
+  context.after(() => fs.rm(spikeRoot, { recursive: true, force: true }));
+  await fs.writeFile(path.join(spikeRoot, "TASK-0002.md"), "# Spike\n\n## Findings\n\nUseful evidence.\n\n## Recommendations\n\nKeep the fixture.\n");
+
+  const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
+  config.files.spikes = spikeRoot;
+  const [requestSource, backlogSource, releaseSource] = await Promise.all([
+    fs.readFile(config.files.requests, "utf8"),
+    fs.readFile(config.files.backlog, "utf8"),
+    fs.readFile(config.files.activeRelease, "utf8"),
+  ]);
+  const requestDocument = parseRequests(requestSource, config.ids);
+  const backlogDocument = parseBacklog(backlogSource, config.ids);
+  const activeRelease = parseActiveRelease(releaseSource, config.ids);
+  const linked = linkModel(requestDocument.items, backlogDocument.items);
+  const health = await buildHealth({ config, requestDocument, backlogDocument, activeRelease, ...linked });
+
+  assert.ok(health.findings.some((finding) => finding.code === "UNNUMBERED_SPIKE_RECOMMENDATIONS" && finding.entity_id === "TASK-0002" && finding.severity === "warning"));
+  assert.equal(health.findings.some((finding) => finding.code === "INCOMPLETE_SPIKE_DOCUMENT" && finding.entity_id === "TASK-0002"), false);
+});
+
 test("links a selected legacy release ID and reports an unresolved ID", async () => {
   const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
   const [requestSource, backlogSource] = await Promise.all([
@@ -316,6 +368,8 @@ test("turns health codes into concrete remediation guidance", () => {
     ["RELEASE_STATUS_DRIFT", "Synchronise release status", { entity_type: "work", entity_id: "TASK-0001" }],
     ["VCS_MISMATCH", "Review the Git repository mismatch", { entity_type: "manifest", entity_id: "vcs.system" }],
     ["MISSING_CHANGELOG", "Create or correct the configured changelog", { entity_type: "manifest", entity_id: "paths.changelog" }],
+    ["MISSING_WORK_PROVENANCE", "Backfill this legacy work-item provenance", { entity_type: "work", entity_id: "TASK-0001" }],
+    ["UNNUMBERED_SPIKE_RECOMMENDATIONS", "Number these spike recommendations", { entity_type: "work", entity_id: "TASK-0001" }],
   ];
   for (const [code, title, entity] of otherWarningCodes) {
     const result = createFinding("warning", code, title, "observed value", entity);
@@ -323,5 +377,12 @@ test("turns health codes into concrete remediation guidance", () => {
     assert.ok(result.recommended_action, `${code} should provide a recommended action`);
     assert.ok(result.action_type, `${code} should classify the response`);
     assert.doesNotMatch(result.meaning, /^This value differs/, `${code} should not use fallback guidance`);
+  }
+
+  for (const code of ["CONFLICTING_WORK_PROVENANCE", "INVALID_SOURCE_RELEASE"]) {
+    const result = createFinding("error", code, "Correct work-item provenance", "observed value", { entity_type: "work", entity_id: "TASK-0001" });
+    assert.ok(result.meaning);
+    assert.ok(result.recommended_action);
+    assert.doesNotMatch(result.meaning, /^This value violates/, `${code} should not use fallback guidance`);
   }
 });

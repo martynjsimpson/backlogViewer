@@ -16,6 +16,8 @@ Status: blocked
 Priority: low
 Summary: This summary includes a sentence with Word: value and must stay intact.
 Blocked on: vendor answer
+Parked since: v1.2.2
+Reviewed: 2 — last v1.2.3, still waiting on the vendor
 Source: fixture
 
 ## Done

@@ -43,6 +43,21 @@ function usage() {
   return `work-management-viewer [options]\n\nOptions:\n  --project <path>  Project directory or project.yml (default: current directory)\n  --port <number>   Local port (default: 5177)\n  --help            Show this help\n`;
 }
 
+function validateArgs(argv) {
+  const valueOptions = new Set(["--project", "--port"]);
+  const flagOptions = new Set(["--help", "-h"]);
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (flagOptions.has(argument)) continue;
+    if (valueOptions.has(argument)) {
+      getArg(argv, argument);
+      index += 1;
+      continue;
+    }
+    throw new ConfigurationError(`Unknown option: ${argument}`, "INVALID_ARGUMENT");
+  }
+}
+
 function send(res, statusCode, body, contentType = "text/plain; charset=utf-8", headers = {}) {
   res.writeHead(statusCode, {
     ...securityHeaders,
@@ -286,6 +301,7 @@ async function main(argv = process.argv.slice(2)) {
     process.stdout.write(usage());
     return null;
   }
+  validateArgs(argv);
   const projectInput = getArg(argv, "--project") || process.env.WORK_MANAGEMENT_PROJECT || process.cwd();
   const port = Number(getArg(argv, "--port") || process.env.PORT || 5177);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new ConfigurationError(`Invalid port: ${port}`, "INVALID_PORT");
@@ -316,4 +332,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { createProjectChangeFeed, createServer, getArg, getData, isAllowedHost, main, shouldIgnoreWatchPath, usage };
+module.exports = { createProjectChangeFeed, createServer, getArg, getData, isAllowedHost, main, shouldIgnoreWatchPath, usage, validateArgs };

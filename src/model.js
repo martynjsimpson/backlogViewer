@@ -30,6 +30,13 @@ function linkModel(requests, backlog) {
     const sourceIds = Array.isArray(item.source_request) ? item.source_request : [item.source_request];
     item.source_requests = sourceIds.filter(Boolean).map((source) => String(source).toUpperCase());
     item.has_request = item.source_requests.some((source) => requestsById.has(source));
+    const hasSourceRequest = item.source_requests.length > 0;
+    const hasSourceRelease = Boolean(item.source_release);
+    item.source_kind = hasSourceRequest && hasSourceRelease
+      ? "conflicting"
+      : hasSourceRequest
+        ? item.has_request ? "request" : "missing_request"
+        : hasSourceRelease ? "release" : "legacy";
     for (const source of item.source_requests) {
       if (!inferredByRequest.has(source)) inferredByRequest.set(source, []);
       inferredByRequest.get(source).push(item.id);
@@ -83,6 +90,26 @@ const FINDING_GUIDANCE = {
     action_type: "fix",
     meaning: "This YAML completion entry is an object rather than a string, usually because a SPIKE: marker was not quoted. The file parses, but the value cannot be interpreted as release evidence.",
     recommended_action: `In ${entity.entity_id}, quote the whole marker, for example "SPIKE: ${entity.entity_id}", so done_in contains a string rather than a YAML mapping.`,
+  }),
+  CONFLICTING_WORK_PROVENANCE: ({ entity }) => ({
+    action_type: "fix",
+    meaning: "A work item must trace either to a human request or to the release that discovered it, never both.",
+    recommended_action: `In ${entity.entity_id}, keep the provenance that represents the item's actual origin and set the other of source_request / source_release to null.`,
+  }),
+  MISSING_WORK_PROVENANCE: ({ entity }) => ({
+    action_type: "maintenance",
+    meaning: "This work item predates the source_release field and has no recorded provenance. It remains valid legacy data, but its origin is not auditable.",
+    recommended_action: `Backfill ${entity.entity_id} from its evidence or delivery history when the item is next touched. Do not block current work or sweep the backlog solely for this warning.`,
+  }),
+  INVALID_SOURCE_RELEASE: ({ entity }) => ({
+    action_type: "fix",
+    meaning: "source_release must contain a release version using the version scheme declared in project.yml.",
+    recommended_action: `In ${entity.entity_id}, replace source_release with the release version that actually surfaced the work. If a person requested it, set source_release to null and use source_request instead.`,
+  }),
+  UNNUMBERED_SPIKE_RECOMMENDATIONS: ({ entity }) => ({
+    action_type: "maintenance",
+    meaning: "Spike recommendations now use a consecutive R1, R2, … sequence so close-out can account for every recommendation without losing one in prose.",
+    recommended_action: `When ${entity.entity_id} is next triaged, number each recommendation consecutively from R1 and keep those identifiers stable for evidence references.`,
   }),
   MISSING_AGENT_PATH: ({ entity }) => ({
     action_type: "review",
@@ -180,6 +207,19 @@ function validVersion(value, scheme) {
   if (scheme === "date") return /^\d{4}\.\d{2}\.\d{2}$/.test(value);
   if (scheme === "semver") return /^\d+\.\d+\.\d+$/.test(value);
   return /^v\d+\.\d+\.\d+$/.test(value);
+}
+
+function hasNumberedRecommendations(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const start = lines.findIndex((line) => /^## Recommendations\s*$/.test(line));
+  if (start < 0) return false;
+  const section = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^##\s+/.test(line)) break;
+    section.push(line);
+  }
+  const numbers = [...new Set([...section.join("\n").matchAll(/\bR(\d+)\b/gi)].map((match) => Number(match[1])))].sort((left, right) => left - right);
+  return numbers.length > 0 && numbers.every((number, index) => number === index + 1);
 }
 
 function validateCompletion(findings, owner, kind, values, scheme, ids) {
@@ -395,7 +435,12 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     if (!WORK_STATUSES.includes(item.status)) findings.push(finding("error", "INVALID_WORK_STATUS", "Invalid work-item status", item.status || "missing", owner));
     if (!workTypes.has(item.type)) findings.push(finding("error", "INVALID_WORK_TYPE", "Work-item type is outside the manifest taxonomy", item.type || "missing", owner));
     if (!priorities.has(item.priority)) findings.push(finding("error", "INVALID_PRIORITY", "Work-item priority is outside the manifest taxonomy", item.priority || "missing", owner));
-    if (item.source_request && !requestsById.has(item.source_request)) findings.push(finding("error", "MISSING_SOURCE_REQUEST", "Work item source request does not resolve", item.source_request, owner));
+    const hasSourceRequest = Boolean(item.source_request);
+    const hasSourceRelease = Boolean(item.source_release);
+    if (hasSourceRequest && hasSourceRelease) findings.push(finding("error", "CONFLICTING_WORK_PROVENANCE", "Work item has two provenance sources", `${item.source_request} / ${item.source_release}`, owner));
+    if (!hasSourceRequest && !hasSourceRelease) findings.push(finding("warning", "MISSING_WORK_PROVENANCE", "Backfill this legacy work-item provenance", "Neither source_request nor source_release is set.", owner));
+    if (hasSourceRequest && !requestsById.has(item.source_request)) findings.push(finding("error", "MISSING_SOURCE_REQUEST", "Work item source request does not resolve", item.source_request, owner));
+    if (hasSourceRelease && !validVersion(item.source_release, manifest.version.scheme)) findings.push(finding("error", "INVALID_SOURCE_RELEASE", "Work item source release is invalid", item.source_release, owner));
     if (item.status === "blocked" && !item.blocked_on) findings.push(finding("error", "BLOCKED_WITHOUT_REASON", "Blocked work item is missing blocked_on", "Add the named dependency.", owner));
     if (item.status === "deferred" && item.blocked_on) findings.push(finding("error", "DEFERRED_WITH_BLOCKER", "Deferred work item carries blocked_on", item.blocked_on, owner));
     if (item.status === "done" && !(item.done_in || []).length) findings.push(finding("error", "COMPLETION_MISSING", "Done work item is missing done_in", "Add its release or spike marker.", owner));
@@ -412,6 +457,7 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
       } else {
         const spike = await fs.readFile(spikeFile, "utf8");
         if (!/^## Findings\s*$/m.test(spike) || !/^## Recommendations\s*$/m.test(spike)) findings.push(finding("error", "INCOMPLETE_SPIKE_DOCUMENT", "Spike document lacks required sections", spikeFile, owner));
+        else if (!hasNumberedRecommendations(spike)) findings.push(finding("warning", "UNNUMBERED_SPIKE_RECOMMENDATIONS", "Number these spike recommendations", spikeFile, owner));
       }
     }
   }
@@ -426,7 +472,8 @@ async function buildHealth({ config, requestDocument, backlogDocument, activeRel
     selected.live_status = live.status;
     selected.live_item = live;
     if (selected.status && selected.status !== live.status) findings.push(finding("warning", "RELEASE_STATUS_DRIFT", "Synchronise active-release and backlog status", `${selected.id}: release says ${selected.status}; backlog says ${live.status}.`, { entity_type: "work", entity_id: selected.id }));
-    if (selected.source && live.source_request && selected.source !== live.source_request) findings.push(finding("error", "RELEASE_SOURCE_DRIFT", "Active-release source differs from backlog", `${selected.id}: ${selected.source} / ${live.source_request}`, { entity_type: "work", entity_id: selected.id }));
+    const liveSource = live.source_request || live.source_release;
+    if (selected.source && liveSource && selected.source !== liveSource) findings.push(finding("error", "RELEASE_SOURCE_DRIFT", "Active-release source differs from backlog", `${selected.id}: ${selected.source} / ${liveSource}`, { entity_type: "work", entity_id: selected.id }));
   }
 
   validateVcsStages(findings, manifest);
