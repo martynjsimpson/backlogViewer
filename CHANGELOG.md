@@ -3,6 +3,15 @@
 All notable changes to Work Management Viewer are documented here. The format follows Keep a
 Changelog, and releases use semantic versioning.
 
+## [Unreleased]
+
+### Changed
+
+- Raise the supported Node.js baseline from the end-of-life Node.js 20 line to Node.js 22, and
+  verify Node.js 22, 24, and 26 in continuous integration.
+- Update the pinned `actions/setup-node` workflow dependency to v7.0.0 and the declared `yaml`
+  dependency range to v2.9.0.
+
 ## [1.0.0] - 2026-08-28
 
 ### Added
