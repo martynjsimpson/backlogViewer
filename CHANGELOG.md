@@ -5,6 +5,8 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-28
+
 ### Changed
 
 - Raise the supported Node.js baseline from the end-of-life Node.js 20 line to Node.js 22, and
