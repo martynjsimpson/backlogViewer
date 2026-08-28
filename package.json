@@ -28,7 +28,7 @@
     "test:watch": "node --test --watch"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
     "server.js",
@@ -40,6 +40,6 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
-    "yaml": "^2.8.1"
+    "yaml": "^2.9.0"
   }
 }

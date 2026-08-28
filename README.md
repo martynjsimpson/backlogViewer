@@ -19,7 +19,7 @@ and migrations remain the plugin's responsibility.
 
 ## Requirements
 
-- Node.js 20 or newer
+- Node.js 22 or newer
 - A work-management manifest using `model_version: 3`, `model_version: 4`, or `model_version: 5`
 
 ## Quick start
