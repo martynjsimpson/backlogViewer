@@ -206,8 +206,8 @@ change events, local HTTP protections, and per-project metric-history isolation.
 ## Compatibility contract
 
 This codebase was last verified against
-[Work Management Claude Plugin v1.5.0](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.5.0)
-and its `model_version: 5` manifest on 28 August 2026. `SUPPORTED_MODEL_VERSIONS` lives in
+[Work Management Claude Plugin v1.6.1](https://github.com/martynjsimpson/workManagementClaudePlugin/releases/tag/v1.6.1)
+and its `model_version: 5` manifest on 10 September 2026. `SUPPORTED_MODEL_VERSIONS` lives in
 `src/constants.js`; the viewer deliberately retains versions 3 and 4 compatibility and fails
 closed on any unlisted version rather than rendering plausible but incorrect data.
 

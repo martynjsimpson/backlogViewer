@@ -140,6 +140,51 @@ Source: v1.2.3 | Type: maintenance | Priority: medium | Status: ready
   assert.deepEqual(release.request_ids, []);
 });
 
+test("parses selected work items from a Markdown table", () => {
+  const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
+  const release = parseActiveRelease(`
+# Active Release
+
+Status: in-progress
+
+## Selected work items
+
+| ID | Title | Source | Type | Priority | Status |
+|:---|---|---|---|---|---:|
+| TASK-0001 | Preserve an escaped \\| in a title | ASK-0001 | bug | high | ready |
+| BUG-058 | Keep \`legacy|IDs\` at C:\\temp | release v1.2.3 | maintenance | medium | blocked |
+
+Full acceptance criteria are in the backlog.
+
+## Decisions
+
+- Continue parsing later sections normally.
+`, ids);
+
+  assert.deepEqual(release.work_items, [
+    {
+      id: "TASK-0001",
+      title: "Preserve an escaped | in a title",
+      source: "ASK-0001",
+      type: "bug",
+      priority: "high",
+      status: "ready",
+      description: "",
+    },
+    {
+      id: "BUG-058",
+      title: "Keep `legacy|IDs` at C:\\temp",
+      source: "release v1.2.3",
+      type: "maintenance",
+      priority: "medium",
+      status: "blocked",
+      description: "",
+    },
+  ]);
+  assert.deepEqual(release.request_ids, ["ASK-0001"]);
+  assert.match(release.section_text.decisions, /Continue parsing/);
+});
+
 test("classifies annotated releases and invalid legacy prose", () => {
   const ids = { workPrefix: "TASK" };
   const values = parseCompletionValues("v1.2.3 (partial), spike completed yesterday", ids);

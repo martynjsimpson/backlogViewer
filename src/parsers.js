@@ -199,6 +199,38 @@ function sectionSlug(value) {
   return keyToProperty(value);
 }
 
+function parseMarkdownTableRow(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.includes("|")) return null;
+
+  const cells = [];
+  let current = "";
+  let inCode = false;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const character = trimmed[index];
+    if (character === "\\" && trimmed[index + 1] === "|") {
+      current += "|";
+      index += 1;
+    } else if (character === "`") {
+      inCode = !inCode;
+      current += character;
+    } else if (character === "|" && !inCode) {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  cells.push(current.trim());
+  if (!cells[0]) cells.shift();
+  if (!cells.at(-1)) cells.pop();
+  return cells.length > 1 ? cells : null;
+}
+
+function isMarkdownTableDivider(cells) {
+  return cells?.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
 function parseActiveRelease(markdown, ids) {
   const release = {
     version: "",
@@ -213,6 +245,8 @@ function parseActiveRelease(markdown, ids) {
   let currentSection = "overview";
   let currentItem = null;
   let lastTopField = null;
+  let selectedItemColumns = null;
+  let selectedItemHeaderColumns = null;
   release.sections.overview = [];
 
   for (const line of markdown.split(/\r?\n/)) {
@@ -222,6 +256,8 @@ function parseActiveRelease(markdown, ids) {
       release.sections[currentSection] = [];
       currentItem = null;
       lastTopField = null;
+      selectedItemColumns = null;
+      selectedItemHeaderColumns = null;
       continue;
     }
 
@@ -233,6 +269,33 @@ function parseActiveRelease(markdown, ids) {
       release.work_items.push(currentItem);
       release.sections[currentSection].push(line);
       continue;
+    }
+
+    if (currentSection === "selected_work_items") {
+      const cells = parseMarkdownTableRow(line);
+      const columns = cells?.map(keyToProperty);
+      if (columns?.includes("id") && columns.includes("title")) {
+        selectedItemHeaderColumns = columns;
+        currentItem = null;
+        release.sections[currentSection].push(line);
+        continue;
+      }
+      if (selectedItemHeaderColumns && isMarkdownTableDivider(cells) && cells.length === selectedItemHeaderColumns.length) {
+        selectedItemColumns = selectedItemHeaderColumns;
+        selectedItemHeaderColumns = null;
+        release.sections[currentSection].push(line);
+        continue;
+      }
+      selectedItemHeaderColumns = null;
+      if (selectedItemColumns && cells && cells.length) {
+        const values = Object.fromEntries(selectedItemColumns.map((column, index) => [column, cells[index] || ""]));
+        if (values.id) {
+          release.work_items.push({ ...values, id: values.id.toUpperCase(), title: values.title || "", description_lines: [] });
+          currentItem = null;
+          release.sections[currentSection].push(line);
+          continue;
+        }
+      }
     }
 
     if (currentItem) {

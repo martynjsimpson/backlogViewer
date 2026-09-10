@@ -5,6 +5,18 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-10
+
+### Added
+
+- Parse table-form selected work items in Active Release files, retaining compatibility with
+  releases authored before the Work Management plugin standardized the H3 item format.
+
+### Changed
+
+- Re-verify compatibility with Work Management Claude Plugin v1.6.1 and its unchanged
+  `model_version: 5` manifest on 10 September 2026.
+
 ## [1.0.2] - 2026-09-10
 
 ### Fixed
