@@ -121,6 +121,9 @@ function hasValue(object, dottedPath) {
 }
 
 function validateManifestShape(manifest, modelVersion = manifest?.model_version) {
+  const nullableRequired = new Set([
+    "project.primary_reference",
+  ]);
   const required = [
     "project.name",
     "project.description",
@@ -141,7 +144,9 @@ function validateManifestShape(manifest, modelVersion = manifest?.model_version)
   ];
   const missing = required.filter((field) => {
     const value = getValue(manifest, field);
-    return value == null || value === "";
+    return !hasValue(manifest, field)
+      || (!nullableRequired.has(field) && value == null)
+      || value === "";
   });
 
   if (!Object.prototype.hasOwnProperty.call(manifest.testing || {}, "policy_document")) {

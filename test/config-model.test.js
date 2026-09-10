@@ -120,6 +120,28 @@ test("loads model v5 release stages and rejects incomplete stage maps", async (c
   );
 });
 
+test("accepts a null primary reference but rejects an omitted one", async (context) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "wmv-primary-reference-"));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const manifestFile = path.join(root, "project.yml");
+  const source = await fs.readFile(path.join(fixtureRoot, "project.yml"), "utf8");
+  const manifest = YAML.parse(source);
+  manifest.project.primary_reference = null;
+  await fs.writeFile(manifestFile, YAML.stringify(manifest));
+
+  const config = await loadProjectConfiguration(manifestFile);
+  assert.equal(config.manifest.project.primary_reference, null);
+
+  delete manifest.project.primary_reference;
+  await fs.writeFile(manifestFile, YAML.stringify(manifest));
+  await assert.rejects(
+    () => loadProjectConfiguration(manifestFile),
+    (error) => error instanceof ConfigurationError
+      && error.code === "INVALID_MANIFEST_SHAPE"
+      && error.details.includes("project.primary_reference"),
+  );
+});
+
 test("reports invalid model v5 stage combinations and a missing version file", async () => {
   const config = await loadProjectConfiguration(path.join(fixtureRoot, "project.yml"));
   config.manifest.vcs = {

@@ -5,6 +5,13 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-09-10
+
+### Fixed
+
+- Accept an explicitly null `project.primary_reference`, preserving the distinction between a
+  project with no product truth source and a manifest that omits the required field.
+
 ## [1.0.1] - 2026-08-28
 
 ### Changed
