@@ -5,6 +5,13 @@ Changelog, and releases use semantic versioning.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-12
+
+### Fixed
+
+- Ignore HTML comments when parsing Active Release fields, sections, and selected work items, so
+  instructional templates cannot override the release's real metadata.
+
 ## [1.1.0] - 2026-09-10
 
 ### Added

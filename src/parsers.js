@@ -231,6 +231,12 @@ function isMarkdownTableDivider(cells) {
   return cells?.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
+function stripHtmlComments(markdown) {
+  return String(markdown || "").replace(/<!--[\s\S]*?(?:-->|$)/g, (comment) => (
+    comment.replace(/[^\r\n]/g, "")
+  ));
+}
+
 function parseActiveRelease(markdown, ids) {
   const release = {
     version: "",
@@ -249,7 +255,7 @@ function parseActiveRelease(markdown, ids) {
   let selectedItemHeaderColumns = null;
   release.sections.overview = [];
 
-  for (const line of markdown.split(/\r?\n/)) {
+  for (const line of stripHtmlComments(markdown).split(/\r?\n/)) {
     const sectionMatch = line.match(/^##\s+(.+)$/);
     if (sectionMatch) {
       currentSection = sectionSlug(sectionMatch[1]);

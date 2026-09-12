@@ -95,6 +95,43 @@ test("parses hyphen release headings and pipe-delimited item fields", async () =
   assert.equal(release.work_items[0].status, "ready");
 });
 
+test("ignores active-release fields and structure inside HTML comments", () => {
+  const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
+  const source = `
+# Active Release
+
+Version: 2.12.1
+Status: released
+Branch: release/2.12.1 <!-- this note is not part of the branch -->
+
+<!--
+Version: TBD
+Status: proposed
+Branch: example-branch
+
+## Selected work items
+
+### TASK-9999 — Example only
+Source: ASK-9999 | Status: ready
+-->
+
+## Selected work items
+
+### TASK-0001 — Real work item
+Source: ASK-0001 | Status: done
+`;
+
+  const release = parseActiveRelease(source, ids);
+
+  assert.equal(release.version, "2.12.1");
+  assert.equal(release.status, "released");
+  assert.equal(release.branch, "release/2.12.1");
+  assert.deepEqual(release.work_items.map((item) => item.id), ["TASK-0001"]);
+  assert.deepEqual(release.request_ids, ["ASK-0001"]);
+  assert.doesNotMatch(release.section_text.overview, /TBD|example-branch/);
+  assert.match(release.source_block, /Version: TBD/);
+});
+
 test("parses mixed legacy and current release IDs only from selected work items", () => {
   const ids = { requestPattern: /^ASK-\d+$/i, workPrefix: "TASK" };
   const release = parseActiveRelease(`
